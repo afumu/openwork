@@ -7,7 +7,7 @@
 - 保持运行时的通用性。
 - 不要把产品专属工作流加入默认运行时。
 - 优先通过工具层或技能层扩展，而不是硬编码行为。
-- 修改完成后运行 `cd /Users/apple/workplace-frontend/openwork/pi && npm run check`。
+- 修改完成后运行 `cd pi && npm run check`。
 
 ## 运行时职责
 
