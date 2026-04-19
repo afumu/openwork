@@ -34,6 +34,9 @@ export class ChatLogEntity extends BaseEntity {
   @Column({ comment: 'PI Agent tool execution trace', nullable: true, type: 'mediumtext' })
   tool_execution: string;
 
+  @Column({ comment: 'Ordered assistant stream segments', nullable: true, type: 'mediumtext' })
+  stream_segments: string;
+
   @Column({
     comment: 'PI Agent artifacts produced by this message',
     nullable: true,

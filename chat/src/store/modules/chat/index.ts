@@ -296,9 +296,8 @@ export const useChatStore = defineStore('chat-store', {
           this.chatList = [] // 如果没有数据，确保 chatList 为空数组
         }
       } catch (error) {
-        // 捕获错误并处理
-
-        this.chatList = [] // 出错时清空 chatList
+        // 历史刷新失败时保留现有消息，避免一次网络抖动把页面上的历史视觉清空。
+        console.warn('queryActiveChatLogList failed, keep existing chatList', error)
       } finally {
         // 无论成功还是失败，都调用 recordState
 

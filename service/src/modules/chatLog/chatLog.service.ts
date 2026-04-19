@@ -22,6 +22,10 @@ import {
   CONVERSATION_SUMMARY_MESSAGE_TYPE,
   isConversationSummaryLog,
 } from '../chat/conversationMemory';
+import {
+  INTERRUPTED_CHAT_MESSAGE,
+  looksLikeTransientAssistantFailure,
+} from '../chat/chatPersistence';
 import { ModelsService } from '../models/models.service';
 import { QuerySingleChatDto } from './dto/querySingleChat.dto';
 
@@ -271,7 +275,10 @@ export class ChatLogService {
       });
       if (count === 0) return [];
     }
-    const list = await this.chatLogEntity.find({ where });
+    const list = await this.chatLogEntity.find({
+      where,
+      order: { createdAt: 'ASC', id: 'ASC' },
+    });
     return list
       .filter(item => !isConversationSummaryLog(item))
       .map(item => {
@@ -305,16 +312,24 @@ export class ChatLogService {
           reasoning_content,
           tool_calls,
           tool_execution,
+          stream_segments,
           artifact_files,
           content,
         } = item;
+        const displayContent = content || (role === 'assistant' ? answer : prompt);
+        const shouldMaskTransientFailure =
+          role === 'assistant' &&
+          [4, 5].includes(Number(status)) &&
+          looksLikeTransientAssistantFailure(displayContent);
+
         return {
           chatId: id,
           dateTime: formatDate(createdAt),
-          content: content || (role === 'assistant' ? answer : prompt),
+          content: shouldMaskTransientFailure ? INTERRUPTED_CHAT_MESSAGE : displayContent,
           reasoningText: reasoning_content,
           tool_calls: tool_calls,
           tool_execution: tool_execution,
+          stream_segments: stream_segments || '',
           artifact_files: artifact_files || '',
           modelType: type,
           status: status,
@@ -388,7 +403,9 @@ export class ChatLogService {
       reasoning_content,
       tool_calls,
       tool_execution,
+      stream_segments,
       progress,
+      status,
       createdAt,
       messageType,
     } = item;
@@ -406,7 +423,9 @@ export class ChatLogService {
       reasoningText: reasoning_content,
       tool_calls,
       tool_execution,
+      stream_segments,
       progress,
+      status,
       createdAt,
       messageType,
     };

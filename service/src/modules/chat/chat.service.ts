@@ -28,6 +28,13 @@ import {
   parseConversationSummaryMetadata,
   selectMessagesForSummary,
 } from './conversationMemory';
+import {
+  buildAssistantFailureLogUpdate,
+  INTERRUPTED_CHAT_MESSAGE,
+  looksLikeTransientAssistantFailure,
+} from './chatPersistence';
+import { appendInterruptedSegment, createStreamSegmentCollector } from './chatStreamSegments';
+import { configureStreamingResponse, startStreamKeepalive } from './streamKeepalive';
 import { GlobalConfigService } from '../globalConfig/globalConfig.service';
 import { ModelsService } from '../models/models.service';
 import { PluginEntity } from '../plugin/plugin.entity';
@@ -406,6 +413,112 @@ export class ChatService {
     let abortReason = 'not_aborted';
     let assistantLogId: number | null = null;
     let hasWrittenInitialChatId = false;
+    let stopStreamKeepalive: () => void = () => undefined;
+    let partialAssistantContent = '';
+    let partialAssistantReasoning = '';
+    let partialToolCalls = '';
+    let partialToolExecution = '';
+    let partialNetworkSearchResult = '';
+    let partialFileVectorResult = '';
+    let lastPartialPersistAt = 0;
+    let lastPartialPersistChars = 0;
+    let partialPersistQueue: Promise<any> = Promise.resolve();
+    const streamSegmentCollector = createStreamSegmentCollector();
+    let hasMarkedClientInterrupted = false;
+
+    const persistPartialAssistantLog = async (force = false) => {
+      if (!assistantLogId) {
+        return partialPersistQueue;
+      }
+
+      const streamSegments = streamSegmentCollector.serialize();
+      const totalChars =
+        partialAssistantContent.length +
+        partialAssistantReasoning.length +
+        partialToolCalls.length +
+        partialToolExecution.length +
+        partialNetworkSearchResult.length +
+        partialFileVectorResult.length +
+        streamSegments.length;
+      if (totalChars === 0) {
+        return partialPersistQueue;
+      }
+
+      const now = Date.now();
+      if (
+        !force &&
+        now - lastPartialPersistAt < 5000 &&
+        totalChars - lastPartialPersistChars < 800
+      ) {
+        return partialPersistQueue;
+      }
+
+      lastPartialPersistAt = now;
+      lastPartialPersistChars = totalChars;
+      const update: Record<string, any> = {
+        status: 2,
+      };
+      if (partialAssistantContent) {
+        update.content = partialAssistantContent;
+      }
+      if (partialAssistantReasoning) {
+        update.reasoning_content = partialAssistantReasoning;
+      }
+      if (partialToolCalls) {
+        update.tool_calls = partialToolCalls;
+      }
+      if (partialToolExecution) {
+        update.tool_execution = partialToolExecution;
+      }
+      if (streamSegments) {
+        update.stream_segments = streamSegments;
+      }
+      if (partialNetworkSearchResult) {
+        update.networkSearchResult = partialNetworkSearchResult;
+      }
+      if (partialFileVectorResult) {
+        update.fileVectorResult = partialFileVectorResult;
+      }
+
+      partialPersistQueue = partialPersistQueue
+        .catch(() => undefined)
+        .then(() => this.chatLogService.updateChatLog(assistantLogId, update))
+        .catch(error => {
+          this.logTrace('warn', traceId, '流式部分内容落库失败，继续聊天流程', {
+            assistantLogId,
+            error: serializeErrorForLog(error),
+            partialChars: totalChars,
+          });
+        });
+
+      return partialPersistQueue;
+    };
+
+    const markClientInterruptedLog = (source: string) => {
+      if (hasMarkedClientInterrupted) {
+        return;
+      }
+      hasMarkedClientInterrupted = true;
+      appendInterruptedSegment(streamSegmentCollector);
+      void persistPartialAssistantLog(true)
+        .then(() =>
+          assistantLogId
+            ? this.chatLogService.updateChatLog(assistantLogId, {
+                status: 4,
+                content: partialAssistantContent || INTERRUPTED_CHAT_MESSAGE,
+                reasoning_content: partialAssistantReasoning || undefined,
+                stream_segments: streamSegmentCollector.serialize(),
+              })
+            : undefined,
+        )
+        .catch(error => {
+          this.logTrace('warn', traceId, '客户端断开后的中断状态落库失败', {
+            assistantLogId,
+            error: serializeErrorForLog(error),
+            source,
+          });
+        });
+    };
 
     Logger.debug(
       `body summary: ${JSON.stringify({
@@ -506,7 +619,6 @@ export class ChatService {
     await this.userService.checkUserStatus(req.user);
 
     /* 敏感词检测 */
-    res && res.setHeader('Content-type', 'application/octet-stream; charset=utf-8');
     // 检查敏感词汇
     if (isSensitiveWordFilter === '1') {
       const triggeredWords = await this.badWordsService.checkBadWords(prompt, req.user.id);
@@ -532,7 +644,6 @@ export class ChatService {
     let currentRequestModelKey = null;
     let appName = '';
     let setSystemMessage = '';
-    res && res.status(200);
     const curIp = getClientIp(req);
     let useModelAvatar = '';
     let usingPlugin;
@@ -834,6 +945,11 @@ export class ChatService {
     const userLogId = userSaveLog.id;
     assistantLogId = assistantSaveLog.id;
 
+    if (res) {
+      configureStreamingResponse(res);
+      stopStreamKeepalive = startStreamKeepalive(res);
+    }
+
     const writeInitialChatIdIfNeeded = () => {
       if (!res || hasWrittenInitialChatId || !assistantLogId) return;
 
@@ -982,6 +1098,7 @@ export class ChatService {
       if (res) {
         req?.on('aborted', () => {
           abortReason = 'request.aborted';
+          markClientInterruptedLog('request.aborted');
           this.logTrace('warn', traceId, '客户端请求已中止(req.aborted)', {
             assistantLogId,
             durationMs: Date.now() - requestStartedAt,
@@ -1015,7 +1132,8 @@ export class ChatService {
         });
 
         res.on('close', () => {
-          const shouldAbort = !abortController.signal.aborted;
+          const shouldAbort =
+            !abortController.signal.aborted && (!res.writableEnded || req?.aborted);
           abortReason = shouldAbort ? 'response.close' : abortReason;
           this.logTrace('warn', traceId, '响应连接关闭(res.close)', {
             abortedBeforeClose: abortController.signal.aborted,
@@ -1030,6 +1148,7 @@ export class ChatService {
             writableEnded: res.writableEnded,
           });
           if (shouldAbort) {
+            markClientInterruptedLog('response.close');
             abortController.abort();
           }
         });
@@ -1091,21 +1210,38 @@ export class ChatService {
               const reasoningText = Array.isArray(chat?.reasoning_content)
                 ? chat.reasoning_content.map((item: any) => item?.text || '').join('')
                 : '';
+              const chatPayload = chat as any;
 
               streamProgress.progressEventCount += 1;
               if (contentText) {
                 streamProgress.contentChunkCount += 1;
                 streamProgress.contentChars += contentText.length;
+                partialAssistantContent += contentText;
+                streamSegmentCollector.appendText(contentText);
               }
               if (reasoningText) {
                 streamProgress.reasoningChunkCount += 1;
                 streamProgress.reasoningChars += reasoningText.length;
+                partialAssistantReasoning += reasoningText;
               }
               if (chat?.tool_calls) {
                 streamProgress.toolCallChunkCount += 1;
+                partialToolCalls = chat.tool_calls;
               }
               if (chat?.tool_execution) {
                 streamProgress.toolExecutionChunkCount += 1;
+                partialToolExecution = chat.tool_execution;
+              }
+              if (chat?.tool_execution_delta) {
+                streamProgress.toolExecutionChunkCount += 1;
+                streamSegmentCollector.upsertToolExecution(chat.tool_execution_delta);
+                partialToolExecution = streamSegmentCollector.serializeToolExecutions();
+              }
+              if (chat?.networkSearchResult) {
+                partialNetworkSearchResult = chat.networkSearchResult;
+              }
+              if (chatPayload?.fileVectorResult) {
+                partialFileVectorResult = chatPayload.fileVectorResult;
               }
               if (!streamProgress.firstProgressAt) {
                 streamProgress.firstProgressAt = now;
@@ -1139,6 +1275,7 @@ export class ChatService {
                 });
               }
 
+              void persistPartialAssistantLog(false);
               res.write(`\n${JSON.stringify(chat)}`);
             },
             onFailure: async data => {
@@ -1147,9 +1284,19 @@ export class ChatService {
                 data: serializeErrorForLog(data),
                 durationMs: Date.now() - requestStartedAt,
               });
+              partialAssistantContent = String(data?.full_content || partialAssistantContent || '');
+              partialAssistantReasoning = String(
+                data?.full_reasoning_content || partialAssistantReasoning || '',
+              );
+              partialToolCalls = data?.tool_calls || partialToolCalls;
+              partialToolExecution = data?.tool_execution || partialToolExecution;
+              partialNetworkSearchResult = data?.networkSearchResult || partialNetworkSearchResult;
+              partialFileVectorResult = data?.fileVectorResult || partialFileVectorResult;
+              appendInterruptedSegment(streamSegmentCollector);
+              await persistPartialAssistantLog(true);
               await this.chatLogService.updateChatLog(assistantLogId, {
-                content: data.errMsg,
-                status: 4,
+                ...buildAssistantFailureLogUpdate(data),
+                stream_segments: streamSegmentCollector.serialize(),
               });
             },
             onDatabase: async data => {
@@ -1195,6 +1342,9 @@ export class ChatService {
           });
 
           if (response.errMsg) {
+            appendInterruptedSegment(streamSegmentCollector);
+            await persistPartialAssistantLog(true);
+            await partialPersistQueue;
             if (response.agentBilling) {
               await this.chatLogService.updateChatLog(assistantLogId, {
                 completionTokens: response.agentBilling.completionTokens,
@@ -1207,6 +1357,15 @@ export class ChatService {
                 totalTokens: response.agentBilling.promptTokens,
               });
             }
+            await this.chatLogService.updateChatLog(assistantLogId, {
+              ...buildAssistantFailureLogUpdate({
+                ...response,
+                full_content: partialAssistantContent || response.full_content,
+                full_reasoning_content:
+                  partialAssistantReasoning || response.full_reasoning_content,
+              }),
+              stream_segments: streamSegmentCollector.serialize(),
+            });
             this.logTrace(
               'error',
               traceId,
@@ -1222,6 +1381,14 @@ export class ChatService {
                 userId: req.user.id,
               },
             );
+            response.errMsg = INTERRUPTED_CHAT_MESSAGE;
+            response.error = INTERRUPTED_CHAT_MESSAGE;
+            response.content = [
+              {
+                type: 'text',
+                text: INTERRUPTED_CHAT_MESSAGE,
+              },
+            ];
             return res.write(`\n${JSON.stringify(response)}`);
           }
 
@@ -1280,12 +1447,14 @@ export class ChatService {
 
           // 如果检测到敏感词，替换为 ***
           // gpt回答 - 使用替换后的内容存入数据库
+          await partialPersistQueue;
           await this.chatLogService.updateChatLog(assistantLogId, {
             // imageUrl: response?.imageUrl,
             content: sanitizedAnswer, // 使用替换后的内容
             reasoning_content: response.full_reasoning_content,
             tool_calls: response.tool_calls,
             tool_execution: response.tool_execution,
+            stream_segments: streamSegmentCollector.serialize(),
             artifact_files: artifactFilesJson,
             promptTokens: billingPromptTokens,
             completionTokens: billingCompletionTokens,
@@ -1374,10 +1543,15 @@ export class ChatService {
             ),
           });
           // 根据你的应用需求，你可能想要在这里设置response为一个错误消息或执行其他错误处理逻辑
+          appendInterruptedSegment(streamSegmentCollector);
+          await persistPartialAssistantLog(true);
           await this.chatLogService.updateChatLog(assistantLogId, {
             status: 5,
+            content: partialAssistantContent || INTERRUPTED_CHAT_MESSAGE,
+            reasoning_content: partialAssistantReasoning || undefined,
+            stream_segments: streamSegmentCollector.serialize(),
           });
-          response = { error: '处理请求时发生错误' };
+          response = { error: INTERRUPTED_CHAT_MESSAGE };
         }
       }
     } catch (error) {
@@ -1394,11 +1568,12 @@ export class ChatService {
         ),
       });
       if (res) {
-        return res.write('发生未知错误，请稍后再试');
+        return res.write(INTERRUPTED_CHAT_MESSAGE);
       } else {
-        throw new HttpException('发生未知错误，请稍后再试', HttpStatus.BAD_REQUEST);
+        throw new HttpException(INTERRUPTED_CHAT_MESSAGE, HttpStatus.BAD_REQUEST);
       }
     } finally {
+      stopStreamKeepalive();
       this.unregisterActiveChatAbort(sessionId, activeAbortEntry);
       if (res) {
         this.logTrace('debug', traceId, '准备结束响应', {
@@ -1493,8 +1668,6 @@ export class ChatService {
         builtMessages.push({ role: 'system', content: systemContent });
       }
 
-      const userMessages = [];
-      const assistantMessages = [];
       const sortedRecords = [...records].sort(
         (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime(),
       );
@@ -1538,15 +1711,26 @@ export class ChatService {
             if (typeof content === 'string' && !content.trim()) {
               continue;
             }
+            if (
+              [4, 5].includes(Number(record.status)) &&
+              typeof content === 'string' &&
+              looksLikeTransientAssistantFailure(content)
+            ) {
+              continue;
+            }
 
-            assistantMessages.push({
+            builtMessages.push({
               id: record.id,
               role: 'assistant',
               content,
               createdAt: record.createdAt,
             });
           } else if (record.role === 'user') {
-            userMessages.push({
+            if (typeof content === 'string' && !content.trim()) {
+              continue;
+            }
+
+            builtMessages.push({
               id: record.id,
               role: 'user',
               content,
@@ -1556,23 +1740,6 @@ export class ChatService {
         } catch (error) {
           Logger.debug(`处理历史记录ID=${record.id}失败: ${error.message}`, 'ChatService');
         }
-      }
-
-      userMessages.sort(
-        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-      );
-      assistantMessages.sort(
-        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-      );
-
-      const pairCount = Math.min(userMessages.length, assistantMessages.length);
-      for (let i = 0; i < pairCount; i++) {
-        builtMessages.push(userMessages[i]);
-        builtMessages.push(assistantMessages[i]);
-      }
-
-      if (userMessages.length > pairCount) {
-        builtMessages.push(userMessages[userMessages.length - 1]);
       }
 
       return builtMessages;
@@ -1776,47 +1943,15 @@ export class ChatService {
       }
     }
 
-    // 修正消息顺序问题：确保消息是一个user一个assistant交替出现
-    // 遍历所有非系统消息，如果发现连续相同角色的消息，则进行调整
     if (messages.length > 1) {
-      const fixedMessages = [];
-      // 保留系统消息
-      if (messages[0].role === 'system') {
-        fixedMessages.push(messages[0]);
-        messages.shift();
-      }
-
-      // 按照严格的user-assistant交替顺序重新构建消息
-      // 确保最后一条消息是user
-      const userMessages = messages
-        .filter(msg => msg.role === 'user')
+      const systemMessages = messages.filter(message => message.role === 'system');
+      const conversationMessages = messages
+        .filter(message => message.role !== 'system')
         .sort(
           (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime(),
         );
-
-      const assistantMessages = messages
-        .filter(msg => msg.role === 'assistant')
-        .sort(
-          (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime(),
-        );
-
-      // 保证最多使用较少的那一组消息的数量
-      const pairCount = Math.min(userMessages.length, assistantMessages.length);
-
-      // 构建交替的消息对
-      for (let i = 0; i < pairCount; i++) {
-        fixedMessages.push(userMessages[i]);
-        fixedMessages.push(assistantMessages[i]);
-      }
-
-      // 如果还有剩余的user消息，添加最后一条
-      if (userMessages.length > pairCount) {
-        fixedMessages.push(userMessages[userMessages.length - 1]);
-      }
-
-      // 替换原消息数组
       messages.length = 0;
-      messages.push(...fixedMessages);
+      messages.push(...systemMessages, ...conversationMessages);
     }
 
     const messagesHistory = messages.map(message => ({

@@ -123,6 +123,7 @@ const componentKey = ref(0)
 const showAppListComponent = ref(false)
 const currentAppDetail = ref<any>(null)
 const artifactsDrawerVisible = ref(false)
+const INTERRUPTED_CHAT_MESSAGE = '任务出现了中断，请点击“继续”接着操作。'
 
 const handleOpenGroupChat = (topic: string) => {
   groupChat.openBuilder(topic)
@@ -135,6 +136,15 @@ const handleResumeGroupChat = () => {
   }
 
   groupChat.openRoom(groupChat.lastRoom.value.id)
+}
+
+const shouldShowInterruptedMessage = (error: any) => {
+  const errorMessage = String(error?.message || '')
+  if (errorMessage.includes('canceled')) return false
+
+  return !['不足', '使用完毕', '手机号绑定', '实名认证', '违规', '合规', '会员专属'].some(keyword =>
+    errorMessage.includes(keyword)
+  )
 }
 
 const handleCreateDiscussionRoom = async () => {
@@ -1208,6 +1218,10 @@ const onConversation = async ({
     } catch (error) {
       console.log('error', error)
       console.log('error.message', error)
+      if (!fullText && shouldShowInterruptedMessage(error)) {
+        fullText = INTERRUPTED_CHAT_MESSAGE
+        displayedText = INTERRUPTED_CHAT_MESSAGE
+      }
       handleStreamError(error)
     } finally {
       // 标记流已结束
@@ -1247,12 +1261,20 @@ const onConversation = async ({
       // 清理工作
       useGlobalStore.updateIsChatIn(false)
       await chatStore.queryMyGroup()
-      updateGroupChatSome(dataSources.value.length - 1, {
-        loading: false,
-      })
-      updateGroupChatSome(dataSources.value.length - 2, {
-        chatId: Number(assistantLogId) - 1,
-      })
+      if (Number(chatStore.active) === Number(options.groupId)) {
+        if (dataSources.value.length > 0) {
+          updateGroupChatSome(dataSources.value.length - 1, {
+            loading: false,
+          })
+        }
+        if (assistantLogId && dataSources.value.length > 1) {
+          updateGroupChatSome(dataSources.value.length - 2, {
+            chatId: Number(assistantLogId) - 1,
+          })
+        }
+        await chatStore.queryActiveChatLogList()
+        componentKey.value += 1
+      }
       activeStreamRequest.value = null
     }
   }
@@ -1317,8 +1339,9 @@ const onConversation = async ({
     // 获取当前对话并更新状态
     const currentChat = dataSources.value[dataSources.value.length - 1]
     if (currentChat) {
+      const fallbackContent = shouldShowInterruptedMessage(error) ? INTERRUPTED_CHAT_MESSAGE : ''
       updateGroupChat(dataSources.value.length - 1, {
-        content: currentChat.content === '' ? '' : currentChat.content,
+        content: currentChat.content === '' ? fallbackContent : currentChat.content,
         role: 'assistant',
         loading: false,
       })
