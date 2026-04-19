@@ -20,6 +20,7 @@ lerna-debug.log*
 __pycache__/
 *.py[cod]
 .env
+**/.wechat-cover-cache/
 
 
 # OS
