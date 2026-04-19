@@ -79,7 +79,7 @@
 
 ### 格式规则
 
-依据 [chat/.prettierrc](/Users/apple/workplace-frontend/openwork/chat/.prettierrc)：
+依据 [chat/.prettierrc](../../chat/.prettierrc)：
 
 - 无分号
 - 单引号
@@ -120,7 +120,7 @@
 
 ### 格式规则
 
-依据 [admin/.prettierrc](/Users/apple/workplace-frontend/openwork/admin/.prettierrc)：
+依据 [admin/.prettierrc](../../admin/.prettierrc)：
 
 - 有分号
 - 单引号
@@ -161,7 +161,7 @@
 
 ### 格式规则
 
-依据 [service/.prettierrc](/Users/apple/workplace-frontend/openwork/service/.prettierrc) 与 [service/.editorconfig](/Users/apple/workplace-frontend/openwork/service/.editorconfig)：
+依据 [service/.prettierrc](../../service/.prettierrc) 与 [service/.editorconfig](../../service/.editorconfig)：
 
 - 有分号
 - 单引号
@@ -214,7 +214,7 @@
 
 ## `pi/` 工作区补充风格
 
-依据 [pi/biome.json](/Users/apple/workplace-frontend/openwork/pi/biome.json) 与 [pi/AGENTS.md](/Users/apple/workplace-frontend/openwork/pi/AGENTS.md)：
+依据 [pi/biome.json](../../pi/biome.json) 与 [pi/AGENTS.md](../../pi/AGENTS.md)：
 
 - 使用 Biome，不使用 `chat/admin/service` 的 Prettier 风格
 - 双引号
@@ -228,7 +228,7 @@
 如果修改 `pi/`：
 
 - 先看 `pi/README.md`
-- 修改后运行 `cd /Users/apple/workplace-frontend/openwork/pi && npm run check`
+- 修改后运行 `cd pi && npm run check`
 - 保持运行时通用，不把产品专属流程塞进默认 runtime
 
 ## 容器与运行时脚本风格
@@ -243,7 +243,7 @@
 
 #### Bash 脚本
 
-参考 [build.sh](/Users/apple/workplace-frontend/openwork/build.sh)、[pi/scripts/build-runtime-image.sh](/Users/apple/workplace-frontend/openwork/pi/scripts/build-runtime-image.sh)、[pi/scripts/reload-runtime-containers.sh](/Users/apple/workplace-frontend/openwork/pi/scripts/reload-runtime-containers.sh)：
+参考 [build.sh](../../build.sh)、[pi/scripts/build-runtime-image.sh](../../pi/scripts/build-runtime-image.sh)、[pi/scripts/reload-runtime-containers.sh](../../pi/scripts/reload-runtime-containers.sh)：
 
 - 文件头使用 `#!/usr/bin/env bash`
 - 开启 `set -euo pipefail`
@@ -255,7 +255,7 @@
 
 #### POSIX `sh` 入口脚本
 
-参考 [pi/scripts/runtime-entrypoint.sh](/Users/apple/workplace-frontend/openwork/pi/scripts/runtime-entrypoint.sh)：
+参考 [pi/scripts/runtime-entrypoint.sh](../../pi/scripts/runtime-entrypoint.sh)：
 
 - 文件头使用 `#!/bin/sh`
 - 开启 `set -eu`
@@ -265,7 +265,7 @@
 
 ### Dockerfile
 
-参考 [pi/Dockerfile.runtime](/Users/apple/workplace-frontend/openwork/pi/Dockerfile.runtime)：
+参考 [pi/Dockerfile.runtime](../../pi/Dockerfile.runtime)：
 
 - 基础镜像尽量明确、精简，例如 `node:22-bookworm-slim`
 - `ENV` 一行一个语义组，保持可读
@@ -277,7 +277,7 @@
 
 ### 容器命名与约束
 
-参考 [service/src/modules/aiTool/chat/piRuntimeManager.ts](/Users/apple/workplace-frontend/openwork/service/src/modules/aiTool/chat/piRuntimeManager.ts)：
+参考 [service/src/modules/aiTool/chat/piRuntimeManager.ts](../../service/src/modules/aiTool/chat/piRuntimeManager.ts)：
 
 - 用户运行时容器名：`openwork-user-<userId>`
 - 工作区卷名：`openwork-user-<userId>-workspace`
