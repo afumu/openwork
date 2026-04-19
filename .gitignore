@@ -1,12 +1,49 @@
-# compiled output
-/dist
-/node_modules
-/public
-**/dist
-**/node_modules
+# Monorepo dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+**/dist/
+dist-ssr/
+**/dist-ssr/
+coverage/
+**/coverage/
+.nyc_output/
+/deploy/
+release/
+
+# Frontend and tool caches
+.cache/
+**/.cache/
+.vite/
+**/.vite/
+.turbo/
+.eslintcache
+.stylelintcache
+*.tsbuildinfo
+*.local
+
+# Runtime and application caches
+**/.wechat-cover-cache/
+
+# Environment and local overrides
+.env
+.env.local
+.env.*.local
+**/.env
+**/.env.local
+**/.env.*.local
+!.env.example
+!**/.env.example
+!service/.env.docker
+!admin/.env.development
+!admin/.env.production
+!admin/.env.test
+!chat/.env.production
 
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 pnpm-debug.log*
@@ -14,29 +51,26 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 
+# Python
 .venv/
-.idea/
-.langgraph_api/
+venv/
 __pycache__/
 *.py[cod]
-.env
-**/.wechat-cover-cache/
-
 
 # OS
 .DS_Store
 
-# Tests
-/coverage
-/.nyc_output
-
 # IDEs and editors
-/.idea
+.idea/
+.vscode/
 .project
 .classpath
 .c9/
 *.launch
 .settings/
 *.sublime-workspace
-
-.env
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
