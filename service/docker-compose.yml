@@ -1,0 +1,56 @@
+version: '3.9'
+
+services:
+  mysql:
+    image: mysql:8
+    command: --mysql-native-password=ON --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    # command: --default-authentication-plugin=caching_sha2_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    restart: always
+    volumes:
+      - ./data/mysql/:/var/lib/mysql/
+      - ./sql/:/docker-entrypoint-initdb.d/ #数据库文件放此目录可自动导入
+    # ports:
+    #   - "3306:3306"
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_ROOT_PASSWORD: '123456'
+      MYSQL_DATABASE: 'openwork'
+      MYSQL_USER: 'openwork'
+      MYSQL_PASSWORD: '123456'
+
+  redis:
+    image: redis
+    # command: --requirepass "12345678" # redis库密码,不需要密码注释本行
+    restart: always
+    # ports:
+    #   - "6379:6379"
+    environment:
+      TZ: Asia/Shanghai # 指定时区
+    volumes:
+      - ./data/redis/:/data/
+
+  openwork:
+    build:
+      context: . # Use the current directory as build context
+      dockerfile: Dockerfile # Specify the Dockerfile name
+    container_name: openwork
+    restart: always
+    ports:
+      - '9527:9527'
+    volumes:
+      - ./.env.docker:/usr/src/app/.env:rw # Mount with explicit read-write permissions
+      - ./dist:/usr/src/app/dist:ro # 挂载dist目录（只读）
+      - ./public:/usr/src/app/public:ro # 挂载public目录（只读）
+      - ./public/file:/usr/src/app/public/file:rw # 挂载public/file目录（读写）
+      - ./package.json:/usr/src/app/package.json:ro # 挂载package.json（只读）
+      - ./pm2.conf.json:/usr/src/app/pm2.conf.json:ro # 挂载pm2.conf.json（只读）
+      - myapp_data:/app/data # Mount the named volume for persistent instance ID
+    environment:
+      - TZ=Asia/Shanghai
+    # depends_on can often be removed if the app handles connection retries
+    # depends_on:
+    #   - mysql
+    #   - redis
+
+volumes:
+  myapp_data: # Define the named volume

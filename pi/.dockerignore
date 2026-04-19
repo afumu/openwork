@@ -1,0 +1,7 @@
+.git
+node_modules
+data
+nohup.out
+nohup01.out
+packages/*/dist
+packages/*/coverage

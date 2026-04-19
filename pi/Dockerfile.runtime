@@ -1,0 +1,31 @@
+FROM node:22-bookworm-slim
+
+WORKDIR /opt/pi
+
+ENV NODE_ENV=production
+ENV PORT=8787
+ENV PI_OPENAI_AGENT_DIR=/workspace/.pi
+ENV PI_OPENAI_CWD=/workspace
+ENV PI_RUNTIME_WORKSPACE_ROOT=/workspace
+
+RUN set -eux; \
+  sed -i 's|http://deb.debian.org|http://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources; \
+  for attempt in 1 2 3; do \
+    apt-get -o Acquire::ForceIPv4=true update && break; \
+    if [ "$attempt" -eq 3 ]; then exit 1; fi; \
+    sleep 5; \
+  done; \
+  apt-get -o Acquire::ForceIPv4=true install -y --no-install-recommends python3 ca-certificates tar; \
+  rm -rf /var/lib/apt/lists/*
+
+COPY scripts ./scripts
+
+RUN mkdir -p /workspace /tmp \
+  && chmod +x /opt/pi/scripts/runtime-entrypoint.sh \
+  && chown -R node:node /opt/pi /workspace /tmp
+
+USER node
+
+EXPOSE 8787
+
+CMD ["/opt/pi/scripts/runtime-entrypoint.sh"]

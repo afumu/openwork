@@ -1,0 +1,94 @@
+{
+  "title": "一、资本市场：从“避险交易”走向“利润重估”",
+  "generated_at": "2026-04-19T04:58:57.539Z",
+  "provider": "openverse",
+  "queries": [
+    "energy market infrastructure",
+    "oil market infrastructure",
+    "manufacturing industry",
+    "logistics infrastructure",
+    "capital market business",
+    "finance market business"
+  ],
+  "selected_cover": "01-openverse-9745af9b-edb9-4d37-a434-268337a5328e.jpg",
+  "candidates": [
+    {
+      "id": "9745af9b-edb9-4d37-a434-268337a5328e",
+      "provider": "openverse",
+      "title": "What subprime crisis? Affordable houses are everywhere.",
+      "image_url": "https://live.staticflickr.com/3151/2960675738_50952cbb1c_b.jpg",
+      "thumbnail_url": "https://api.openverse.org/v1/images/9745af9b-edb9-4d37-a434-268337a5328e/thumb/",
+      "creator": "woodleywonderworks",
+      "license": "by 2.0",
+      "width": 1024,
+      "height": 683,
+      "score": 7,
+      "local_file": "01-openverse-9745af9b-edb9-4d37-a434-268337a5328e.jpg"
+    },
+    {
+      "id": "ec7bccdf-fd2b-445e-8c94-398831b8251b",
+      "provider": "openverse",
+      "title": "Today Labour Launched Their Election Manifesto",
+      "image_url": "https://live.staticflickr.com/4145/5436187431_481d4734ea_b.jpg",
+      "thumbnail_url": "https://api.openverse.org/v1/images/ec7bccdf-fd2b-445e-8c94-398831b8251b/thumb/",
+      "creator": "infomatique",
+      "license": "by-sa 2.0",
+      "width": 1024,
+      "height": 493,
+      "score": 7,
+      "local_file": "02-openverse-ec7bccdf-fd2b-445e-8c94-398831b8251b.jpg"
+    },
+    {
+      "id": "c8091475-81c9-439d-b1bd-fcaf41f26b23",
+      "provider": "openverse",
+      "title": "Carrots",
+      "image_url": "https://live.staticflickr.com/3002/2806658491_094968c835_b.jpg",
+      "thumbnail_url": "https://api.openverse.org/v1/images/c8091475-81c9-439d-b1bd-fcaf41f26b23/thumb/",
+      "creator": "Ed Yourdon",
+      "license": "by-nc-sa 2.0",
+      "width": 1024,
+      "height": 677,
+      "score": 7,
+      "local_file": "03-openverse-c8091475-81c9-439d-b1bd-fcaf41f26b23.jpg"
+    },
+    {
+      "id": "9a60ddeb-f15e-4737-9573-ec9765cc4f0f",
+      "provider": "openverse",
+      "title": "Deepening the U.S.-India Commercial Partnership: The First Year of the Modi Government",
+      "image_url": "https://live.staticflickr.com/7681/17050183909_157d65a39c_b.jpg",
+      "thumbnail_url": "https://api.openverse.org/v1/images/9a60ddeb-f15e-4737-9573-ec9765cc4f0f/thumb/",
+      "creator": "CSIS: Center for Strategic & International Studies",
+      "license": "by-nc-sa 2.0",
+      "width": 1024,
+      "height": 683,
+      "score": 7,
+      "local_file": "04-openverse-9a60ddeb-f15e-4737-9573-ec9765cc4f0f.jpg"
+    },
+    {
+      "id": "8463d6c4-5e7c-4b0a-808b-ef28efb20e45",
+      "provider": "openverse",
+      "title": "The Chinese Electric Bike Surprise",
+      "image_url": "https://live.staticflickr.com/4060/4503260722_cd038078d3_b.jpg",
+      "thumbnail_url": "https://api.openverse.org/v1/images/8463d6c4-5e7c-4b0a-808b-ef28efb20e45/thumb/",
+      "creator": "jurvetson",
+      "license": "by 2.0",
+      "width": 1024,
+      "height": 840,
+      "score": 4,
+      "local_file": "05-openverse-8463d6c4-5e7c-4b0a-808b-ef28efb20e45.jpg"
+    },
+    {
+      "id": "964d9e97-b151-40e8-98d7-19e68ba385e3",
+      "provider": "openverse",
+      "title": "Craig Miller, CTO of GridPoint",
+      "image_url": "https://live.staticflickr.com/33/42317362_1a17e16fb3_b.jpg",
+      "thumbnail_url": "https://api.openverse.org/v1/images/964d9e97-b151-40e8-98d7-19e68ba385e3/thumb/",
+      "creator": "Esthr",
+      "license": "by-nc 2.0",
+      "width": 1024,
+      "height": 771,
+      "score": 4,
+      "local_file": "06-openverse-964d9e97-b151-40e8-98d7-19e68ba385e3.jpg"
+    }
+  ]
+}
