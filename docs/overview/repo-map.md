@@ -24,7 +24,7 @@
 
 ## 常用入口
 
-- [docs/README.md](../README.md)
-- [docs/current/system-status.md](../current/system-status.md)
-- [docs/overview/development-style.md](./development-style.md)
-- [docs/operations/deployment.md](../operations/deployment.md)
+- [docs/README.md](/Users/apple/workplace-frontend/openwork/docs/README.md)
+- [docs/current/system-status.md](/Users/apple/workplace-frontend/openwork/docs/current/system-status.md)
+- [docs/overview/development-style.md](/Users/apple/workplace-frontend/openwork/docs/overview/development-style.md)
+- [docs/operations/deployment.md](/Users/apple/workplace-frontend/openwork/docs/operations/deployment.md)

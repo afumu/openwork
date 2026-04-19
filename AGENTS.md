@@ -2,9 +2,9 @@
 
 ## Read Order
 
-- Start with [docs/README.md](./docs/README.md).
-- Read [docs/current/system-status.md](./docs/current/system-status.md) before touching runtime, runtime bundle, search, or container orchestration.
-- If the task touches `pi/`, also read [pi/AGENTS.md](./pi/AGENTS.md).
+- Start with [docs/README.md](/Users/apple/workplace-frontend/openwork/docs/README.md).
+- Read [docs/current/system-status.md](/Users/apple/workplace-frontend/openwork/docs/current/system-status.md) before touching runtime, runtime bundle, search, or container orchestration.
+- If the task touches `pi/`, also read [pi/AGENTS.md](/Users/apple/workplace-frontend/openwork/pi/AGENTS.md).
 
 ## Repo Map
 

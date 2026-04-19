@@ -62,7 +62,7 @@ chat frontend
 - 当 `PI_DOCKER_ENABLED=1` 时，运行时容器按用户隔离
 - runtime bundle 仍然是部署与版本切换的基本单位
 
-更详细的当前事实可以查看 [docs/current/system-status.md](./docs/current/system-status.md)。
+更详细的当前事实可以查看 [docs/current/system-status.md](/Users/apple/workplace-frontend/openwork/docs/current/system-status.md)。
 
 ## Repository Layout
 
@@ -95,18 +95,18 @@ cd pi && npm run check
 
 ### 建议阅读顺序
 
-1. [docs/README.md](./docs/README.md)
-2. [docs/current/system-status.md](./docs/current/system-status.md)
-3. [docs/overview/repo-map.md](./docs/overview/repo-map.md)
-4. [docs/overview/development-style.md](./docs/overview/development-style.md)
-5. [docs/operations/deployment.md](./docs/operations/deployment.md)
+1. [docs/README.md](/Users/apple/workplace-frontend/openwork/docs/README.md)
+2. [docs/current/system-status.md](/Users/apple/workplace-frontend/openwork/docs/current/system-status.md)
+3. [docs/overview/repo-map.md](/Users/apple/workplace-frontend/openwork/docs/overview/repo-map.md)
+4. [docs/overview/development-style.md](/Users/apple/workplace-frontend/openwork/docs/overview/development-style.md)
+5. [docs/operations/deployment.md](/Users/apple/workplace-frontend/openwork/docs/operations/deployment.md)
 
 ## Development Notes
 
 - `chat/` 维持现有无分号风格
 - `admin/` 与 `service/` 维持现有有分号 TypeScript 风格
 - `pi/` 使用 Biome，采用独立的双引号 + Tab 风格
-- 修改前优先阅读 [docs/overview/development-style.md](./docs/overview/development-style.md)
+- 修改前优先阅读 [docs/overview/development-style.md](/Users/apple/workplace-frontend/openwork/docs/overview/development-style.md)
 - 不直接编辑生成产物，例如 `dist/`
 
 ## What This Repo Includes
@@ -126,10 +126,9 @@ cd pi && npm run check
 
 ## Docs
 
-- [文档导览 / Docs Guide](./docs/README.md)
-- [开源说明 / Open Source Note](./docs/overview/open-source-note.md)
-- [当前系统状态 / Current System Status](./docs/current/system-status.md)
-- [仓库地图 / Repo Map](./docs/overview/repo-map.md)
-- [开发风格指南 / Development Style Guide](./docs/overview/development-style.md)
-- [部署说明 / Deployment](./docs/operations/deployment.md)
-- [运行时打包产物 / Runtime Bundle](./docs/operations/runtime-bundle.md)
+- [文档导览 / Docs Guide](/Users/apple/workplace-frontend/openwork/docs/README.md)
+- [当前系统状态 / Current System Status](/Users/apple/workplace-frontend/openwork/docs/current/system-status.md)
+- [仓库地图 / Repo Map](/Users/apple/workplace-frontend/openwork/docs/overview/repo-map.md)
+- [开发风格指南 / Development Style Guide](/Users/apple/workplace-frontend/openwork/docs/overview/development-style.md)
+- [部署说明 / Deployment](/Users/apple/workplace-frontend/openwork/docs/operations/deployment.md)
+- [运行时打包产物 / Runtime Bundle](/Users/apple/workplace-frontend/openwork/docs/operations/runtime-bundle.md)

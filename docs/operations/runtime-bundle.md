@@ -14,7 +14,7 @@
 ## 构建
 
 ```bash
-cd pi
+cd /Users/apple/workplace-frontend/openwork/pi
 npm run build:runtime-bundle -- <version>
 ```
 

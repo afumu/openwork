@@ -10,10 +10,6 @@
 4. [部署说明](./operations/deployment.md)
 5. [运行时打包产物](./operations/runtime-bundle.md)
 
-## 其他说明
-
-- [开源说明](./overview/open-source-note.md)
-
 ## 编写原则
 
 - 文档保持最新，并尽量简短。

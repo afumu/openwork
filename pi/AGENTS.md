@@ -2,9 +2,9 @@
 
 ## Read Order
 
-- Start with [README.md](./README.md).
+- Start with [README.md](/Users/apple/workplace-frontend/openwork/pi/README.md).
 - If the task targets one package, also read that package README when it exists.
-- For runtime maintenance, read [docs/operations/pi-maintainer-guide.md](../docs/operations/pi-maintainer-guide.md).
+- For runtime maintenance, read [docs/operations/pi-maintainer-guide.md](/Users/apple/workplace-frontend/openwork/docs/operations/pi-maintainer-guide.md).
 
 ## Hard Rules
 
@@ -16,6 +16,6 @@
 ## Commands
 
 ```bash
-cd pi
+cd /Users/apple/workplace-frontend/openwork/pi
 npm run check
 ```
