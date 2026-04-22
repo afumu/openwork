@@ -8,6 +8,18 @@ OpenWork is my first open source project.
 
 This repository will continue to evolve. Future updates may include code cleanup, documentation improvements, runtime enhancements, deployment refinements, and platform-level capabilities based on real-world usage and feedback.
 
+## 致谢与来源
+
+OpenWork 是在 [99AI](https://github.com/vastxie/99AI) 的基础上做了一些改造和扩展；项目中的容器与运行时相关能力长期参考并使用了 [PI-mono](https://github.com/badlogic/pi-mono)。
+
+感谢 99AI 和 PI-mono 两个开源项目，以及它们为社区提供的基础能力与实践参考。
+
+## Credits
+
+OpenWork is built by adapting and extending [99AI](https://github.com/vastxie/99AI), and its container/runtime layer has long relied on and referenced [PI-mono](https://github.com/badlogic/pi-mono).
+
+Many thanks to the 99AI and PI-mono projects for their open source work, foundational capabilities, and practical reference value.
+
 ## 后续更新方式
 
 - 常规代码更新会直接提交到仓库。

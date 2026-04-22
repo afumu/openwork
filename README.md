@@ -124,6 +124,16 @@ cd pi && npm run check
 - Fixed multi-stage content pipelines tied to one business scenario
 - A single hardcoded skill pack for one use case
 
+## 致谢与来源 / Credits
+
+OpenWork 是在 [99AI](https://github.com/vastxie/99AI) 的基础上做了一些改造和扩展；项目中的容器与运行时相关能力长期参考并使用了 [PI-mono](https://github.com/badlogic/pi-mono)。
+
+感谢 99AI 和 PI-mono 两个开源项目，以及它们为社区提供的基础能力与实践参考。
+
+OpenWork is built by adapting and extending [99AI](https://github.com/vastxie/99AI), and its container/runtime layer has long relied on and referenced [PI-mono](https://github.com/badlogic/pi-mono).
+
+Many thanks to the 99AI and PI-mono projects for their open source work, foundational capabilities, and practical reference value.
+
 ## Docs
 
 - [文档导览 / Docs Guide](./docs/README.md)
