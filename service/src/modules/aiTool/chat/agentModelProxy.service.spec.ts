@@ -23,7 +23,7 @@ const { AgentModelProxyService } = require('./agentModelProxy.service');
 
 const JWT_SECRET = 'jwt-secret';
 
-function createService() {
+function createService(modelOverrides: Record<string, any> = {}) {
   const globalConfigService = {
     getConfigs: jest.fn().mockResolvedValue({
       openaiBaseKey: 'sk-default',
@@ -32,6 +32,7 @@ function createService() {
   };
   const modelsService = {
     getCurrentModelKeyInfo: jest.fn().mockResolvedValue({
+      apiFormat: 'openai',
       deduct: 1,
       deductType: 1,
       id: 7,
@@ -42,6 +43,7 @@ function createService() {
       model: 'real-model',
       proxyUrl: 'http://model.example/v1',
       tokenFeeRatio: 1000,
+      ...modelOverrides,
     }),
     saveUseLog: jest.fn(),
   };
@@ -173,6 +175,79 @@ describe('AgentModelProxyService upstream retry', () => {
           code: 'upstream_model_error',
           message: expect.stringContaining('HTTP 400'),
         }),
+      }),
+    );
+  });
+
+  it('converts OpenAI-compatible requests to Anthropic Messages format when configured', async () => {
+    const fetchMock = jest.spyOn(global, 'fetch').mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          content: [{ text: 'hello from anthropic', type: 'text' }],
+          id: 'msg_1',
+          model: 'claude-3-5-sonnet',
+          role: 'assistant',
+          stop_reason: 'end_turn',
+          type: 'message',
+          usage: {
+            input_tokens: 12,
+            output_tokens: 5,
+          },
+        }),
+        { headers: { 'content-type': 'application/json' }, status: 200 },
+      ),
+    );
+    const service = createService({
+      apiFormat: 'anthropic',
+      model: 'claude-3-5-sonnet',
+      proxyUrl: 'http://anthropic.example/v1',
+    });
+    const res = createRes();
+
+    await service.proxyChatCompletions(
+      createToken(),
+      {
+        messages: [
+          { content: 'System rules', role: 'system' },
+          { content: 'Hello', role: 'user' },
+        ],
+        model: 'gpt-5.3-codex',
+        stream: false,
+      },
+      res,
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://anthropic.example/v1/messages',
+      expect.objectContaining({
+        body: JSON.stringify({
+          max_tokens: 4096,
+          messages: [{ content: 'Hello', role: 'user' }],
+          model: 'claude-3-5-sonnet',
+          stream: false,
+          system: 'System rules',
+        }),
+        headers: expect.objectContaining({
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+          'x-api-key': 'sk-model',
+        }),
+        method: 'POST',
+      }),
+    );
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        choices: [
+          expect.objectContaining({
+            finish_reason: 'stop',
+            message: { content: 'hello from anthropic', role: 'assistant' },
+          }),
+        ],
+        usage: {
+          completion_tokens: 5,
+          prompt_tokens: 12,
+          total_tokens: 17,
+        },
       }),
     );
   });

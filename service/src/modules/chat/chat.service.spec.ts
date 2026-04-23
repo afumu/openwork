@@ -125,4 +125,96 @@ describe('ChatService history building', () => {
       '继续。',
     ]);
   });
+
+  it('restores assistant tool calls and matching tool results from persisted history', async () => {
+    const service = createChatService();
+    const toolCalls = JSON.stringify([
+      {
+        id: 'tool-call-1',
+        type: 'function',
+        function: {
+          name: 'read',
+          arguments: '{"path":"/workspace/AGENTS.md"}',
+        },
+      },
+    ]);
+    const toolExecution = JSON.stringify([
+      {
+        tool_call_id: 'tool-call-1',
+        tool_name: 'read',
+        event: 'end',
+        phase: 'completed',
+        result_preview: '# Repository Guidelines\\n\\nRead docs first.',
+      },
+    ]);
+    const chatLogService = {
+      findLatestConversationSummary: jest.fn().mockResolvedValue(null),
+      findConversationContextLogs: jest.fn().mockResolvedValue([
+        {
+          id: 1,
+          role: 'user',
+          content: '继续刚才中断的流程。',
+          createdAt: new Date('2026-04-19T10:00:00.000Z'),
+        },
+        {
+          id: 2,
+          role: 'assistant',
+          content: '好的，我先读取项目说明。',
+          tool_calls: toolCalls,
+          tool_execution: toolExecution,
+          createdAt: new Date('2026-04-19T10:01:00.000Z'),
+        },
+        {
+          id: 3,
+          role: 'user',
+          content: '继续。',
+          createdAt: new Date('2026-04-19T10:02:00.000Z'),
+        },
+      ]),
+    };
+
+    const { messagesHistory } = await (service as any).buildMessageFromParentMessageId(
+      {
+        groupId: 99,
+        maxModelTokens: 64000,
+        maxRounds: 10,
+        systemMessage: '系统提示',
+      },
+      chatLogService,
+    );
+
+    expect(messagesHistory).toEqual([
+      {
+        role: 'system',
+        content: '系统提示',
+      },
+      {
+        role: 'user',
+        content: '继续刚才中断的流程。',
+      },
+      {
+        role: 'assistant',
+        content: '好的，我先读取项目说明。',
+        tool_calls: [
+          {
+            id: 'tool-call-1',
+            type: 'function',
+            function: {
+              name: 'read',
+              arguments: '{"path":"/workspace/AGENTS.md"}',
+            },
+          },
+        ],
+      },
+      {
+        role: 'tool',
+        tool_call_id: 'tool-call-1',
+        content: '# Repository Guidelines\\n\\nRead docs first.',
+      },
+      {
+        role: 'user',
+        content: '继续。',
+      },
+    ]);
+  });
 });

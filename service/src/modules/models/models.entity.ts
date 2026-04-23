@@ -81,6 +81,9 @@ export class ModelsEntity extends BaseEntity {
   @Column({ comment: '当前模型的代理地址', nullable: true })
   proxyUrl: string;
 
+  @Column({ comment: '接口格式: openai | anthropic', default: 'openai' })
+  apiFormat: string;
+
   @Column({ comment: '模型频率限制 次/小时', default: 999 })
   modelLimits: number;
 

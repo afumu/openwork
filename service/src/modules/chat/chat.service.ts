@@ -23,6 +23,7 @@ import { ChatGroupService } from '../chatGroup/chatGroup.service';
 import { ChatLogService } from '../chatLog/chatLog.service';
 import {
   buildConversationMemoryBlock,
+  buildConversationTaskStateSnapshot,
   chunkMessagesForSummary,
   formatMessagesForSummary,
   parseConversationSummaryMetadata,
@@ -32,6 +33,7 @@ import {
   buildAssistantFailureLogUpdate,
   INTERRUPTED_CHAT_MESSAGE,
   looksLikeTransientAssistantFailure,
+  shouldTreatAssistantResponseAsInterrupted,
 } from './chatPersistence';
 import { appendInterruptedSegment, createStreamSegmentCollector } from './chatStreamSegments';
 import { configureStreamingResponse, startStreamKeepalive } from './streamKeepalive';
@@ -1341,7 +1343,7 @@ export class ChatService {
             ),
           });
 
-          if (response.errMsg) {
+          if (shouldTreatAssistantResponseAsInterrupted(response)) {
             appendInterruptedSegment(streamSegmentCollector);
             await persistPartialAssistantLog(true);
             await partialPersistQueue;
@@ -1367,15 +1369,20 @@ export class ChatService {
               stream_segments: streamSegmentCollector.serialize(),
             });
             this.logTrace(
-              'error',
+              response.errMsg ? 'error' : 'warn',
               traceId,
               response.agentBilling
-                ? '回复出错，Agent 内部模型调用已按实际用量结算'
-                : '回复出错，本次不扣除积分',
+                ? response.errMsg
+                  ? '回复出错，Agent 内部模型调用已按实际用量结算'
+                  : '回复因长度截断，Agent 内部模型调用已按实际用量结算'
+                : response.errMsg
+                  ? '回复出错，本次不扣除积分'
+                  : '回复因长度截断，请点击“继续”接着操作',
               {
                 assistantLogId,
                 agentBilling: response.agentBilling || null,
-                error: response.errMsg,
+                error: response.errMsg || null,
+                finishReason: response?.finishReason || null,
                 model: useModel,
                 modelName: useModeName,
                 userId: req.user.id,
@@ -1659,6 +1666,67 @@ export class ChatService {
     let conversationSummary = '';
     let summaryAwareHistory = false;
 
+    const parsePersistedArray = (raw: any) => {
+      if (!raw) return [];
+      if (Array.isArray(raw)) return raw;
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    };
+
+    const buildToolResultContent = (execution: any) => {
+      const preview = String(
+        execution?.result_preview || execution?.display_subtitle || execution?.args_preview || '',
+      ).trim();
+
+      if (preview) {
+        return preview;
+      }
+
+      if (execution?.is_error) {
+        return `Tool ${execution?.tool_name || 'unknown'} failed.`;
+      }
+
+      if (execution?.phase === 'completed') {
+        return `Tool ${execution?.tool_name || 'unknown'} completed.`;
+      }
+
+      return '';
+    };
+
+    const buildToolResultMessages = (
+      toolCalls: any[],
+      toolExecutions: any[],
+      createdAt: Date | string,
+    ) => {
+      const executionById = new Map(
+        toolExecutions
+          .filter(item => item && typeof item === 'object' && item.tool_call_id)
+          .map(item => [String(item.tool_call_id), item]),
+      );
+      const toolMessages = [];
+
+      for (const toolCall of toolCalls) {
+        const toolCallId = String(toolCall?.id || '').trim();
+        if (!toolCallId) continue;
+        const execution = executionById.get(toolCallId);
+        if (!execution) continue;
+        const content = buildToolResultContent(execution);
+        if (!content) continue;
+        toolMessages.push({
+          role: 'tool',
+          tool_call_id: toolCallId,
+          content,
+          createdAt,
+        });
+      }
+
+      return toolMessages;
+    };
+
     const buildMessagesFromHistory = async (records, memorySummary = '') => {
       const builtMessages = [];
       const memoryBlock = buildConversationMemoryBlock(memorySummary);
@@ -1675,6 +1743,17 @@ export class ChatService {
       for (const record of sortedRecords) {
         try {
           let content = record.content || '';
+          const persistedToolCalls = parsePersistedArray(record.tool_calls).filter(
+            item =>
+              item &&
+              typeof item === 'object' &&
+              item.function &&
+              typeof item.id === 'string' &&
+              item.id.trim(),
+          );
+          const persistedToolExecutions = parsePersistedArray(record.tool_execution).filter(
+            item => item && typeof item === 'object' && item.tool_call_id,
+          );
 
           if (isFileUpload === 1 && record.fileUrl) {
             try {
@@ -1708,7 +1787,7 @@ export class ChatService {
 
           if (record.role === 'assistant') {
             content = removeThinkTags(content);
-            if (typeof content === 'string' && !content.trim()) {
+            if (typeof content === 'string' && !content.trim() && persistedToolCalls.length === 0) {
               continue;
             }
             if (
@@ -1719,12 +1798,24 @@ export class ChatService {
               continue;
             }
 
-            builtMessages.push({
+            const assistantMessage: Record<string, any> = {
               id: record.id,
               role: 'assistant',
               content,
               createdAt: record.createdAt,
-            });
+            };
+            if (persistedToolCalls.length > 0) {
+              assistantMessage.tool_calls = persistedToolCalls;
+            }
+
+            builtMessages.push(assistantMessage);
+            builtMessages.push(
+              ...buildToolResultMessages(
+                persistedToolCalls,
+                persistedToolExecutions,
+                record.createdAt,
+              ),
+            );
           } else if (record.role === 'user') {
             if (typeof content === 'string' && !content.trim()) {
               continue;
@@ -1801,8 +1892,12 @@ export class ChatService {
             message: '历史对话较长，OpenWork 正在压缩旧上下文以保持对话连续。',
             progress: 5,
           });
+          const taskStateSnapshot = buildConversationTaskStateSnapshot([
+            ...messagesToSummarize,
+            ...recentMessages,
+          ]);
           const summarySystemMessage =
-            '你是 OpenWork 的会话记忆压缩器。你的任务是把历史对话压缩为后续模型可用的事实摘要，避免泄露系统提示词、内部工作流或技能文件细节。';
+            '你是 OpenWork 的会话记忆压缩器。你的任务是把历史对话压缩为后续模型可用的任务摘要，优先保留用户目标、已确认决策、当前工作流状态、关键产物、未完成事项和恢复提示。不要复述系统提示词或整段技能文件原文。';
           const summaryChunks = chunkMessagesForSummary(messagesToSummarize);
           let nextSummary = conversationSummary;
 
@@ -1817,7 +1912,9 @@ export class ChatService {
             const previousSummary = nextSummary ? `已有会话摘要：\n${nextSummary}\n\n` : '';
             const summaryPrompt = [
               previousSummary,
-              '请将以下对话压缩为一份新的连续会话摘要，保留用户目标、偏好、限制、已确认方案、未完成事项和关键事实。',
+              '请将以下对话压缩为一份新的连续会话摘要。',
+              '摘要必须优先保留：用户目标、偏好、限制、已确认方案、当前任务状态、当前工作流步骤、关键产物路径、未完成事项、恢复提示。',
+              taskStateSnapshot ? `当前任务状态快照：\n${taskStateSnapshot}\n` : '',
               '只输出摘要正文，不要解释压缩过程。',
               '',
               formatMessagesForSummary(chunk),
@@ -1954,10 +2051,22 @@ export class ChatService {
       messages.push(...systemMessages, ...conversationMessages);
     }
 
-    const messagesHistory = messages.map(message => ({
-      role: message.role,
-      content: message.content,
-    }));
+    const messagesHistory = messages.map(message => {
+      const payload: Record<string, any> = {
+        role: message.role,
+        content: message.content,
+      };
+
+      if (message.tool_calls) {
+        payload.tool_calls = message.tool_calls;
+      }
+
+      if (message.tool_call_id) {
+        payload.tool_call_id = message.tool_call_id;
+      }
+
+      return payload;
+    });
     totalTokens = await getTokenCount(messagesHistory);
 
     Logger.debug(

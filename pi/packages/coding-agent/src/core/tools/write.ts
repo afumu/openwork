@@ -1,7 +1,7 @@
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { Container, Text } from "@mariozechner/pi-tui";
 import { type Static, Type } from "@sinclair/typebox";
-import { mkdir as fsMkdir, writeFile as fsWriteFile } from "fs/promises";
+import { appendFile as fsAppendFile, mkdir as fsMkdir, writeFile as fsWriteFile } from "fs/promises";
 import { dirname } from "path";
 import { keyHint } from "../../modes/interactive/components/keybinding-hints.js";
 import { getLanguageFromPath, highlightCode } from "../../modes/interactive/theme/theme.js";
@@ -15,9 +15,16 @@ import { wrapToolDefinition } from "./tool-definition-wrapper.js";
 const writeSchema = Type.Object({
 	path: Type.String({ description: "Path to the file to write (relative or absolute)" }),
 	content: Type.String({ description: "Content to write to the file" }),
+	mode: Type.Optional(
+		Type.Union([Type.Literal("overwrite"), Type.Literal("append")], {
+			description:
+				"Write mode. Defaults to overwrite. Use append to add a smaller chunk to the end of an existing or newly-created file.",
+		}),
+	),
 });
 
 export type WriteToolInput = Static<typeof writeSchema>;
+type WriteMode = NonNullable<WriteToolInput["mode"]>;
 
 /**
  * Pluggable operations for the write tool.
@@ -26,12 +33,15 @@ export type WriteToolInput = Static<typeof writeSchema>;
 export interface WriteOperations {
 	/** Write content to a file */
 	writeFile: (absolutePath: string, content: string) => Promise<void>;
+	/** Append content to a file */
+	appendFile?: (absolutePath: string, content: string) => Promise<void>;
 	/** Create directory recursively */
 	mkdir: (dir: string) => Promise<void>;
 }
 
 const defaultWriteOperations: WriteOperations = {
 	writeFile: (path, content) => fsWriteFile(path, content, "utf-8"),
+	appendFile: (path, content) => fsAppendFile(path, content, "utf-8"),
 	mkdir: (dir) => fsMkdir(dir, { recursive: true }).then(() => {}),
 };
 
@@ -190,13 +200,16 @@ export function createWriteToolDefinition(
 		name: "write",
 		label: "write",
 		description:
-			"Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories.",
-		promptSnippet: "Create or overwrite files",
-		promptGuidelines: ["Use write only for new files or complete rewrites."],
+			"Write content to a file. Creates the file if it doesn't exist. Defaults to overwriting, or appends when mode is append. Automatically creates parent directories.",
+		promptSnippet: "Create, overwrite, or append to files",
+		promptGuidelines: [
+			"Use write with mode=overwrite only for new files or complete rewrites.",
+			"For large documents, write a short initial file first, then use write with mode=append in smaller chunks instead of one huge write call.",
+		],
 		parameters: writeSchema,
 		async execute(
 			_toolCallId,
-			{ path, content }: { path: string; content: string },
+			{ path, content, mode = "overwrite" }: { path: string; content: string; mode?: WriteMode },
 			signal?: AbortSignal,
 			_onUpdate?,
 			_ctx?,
@@ -226,13 +239,20 @@ export function createWriteToolDefinition(
 									// Create parent directories if needed.
 									await ops.mkdir(dir);
 									if (aborted) return;
-									// Write the file contents.
-									await ops.writeFile(absolutePath, content);
+									if (mode === "append") {
+										if (!ops.appendFile) {
+											throw new Error("Append mode is not supported by the configured write operations");
+										}
+										await ops.appendFile(absolutePath, content);
+									} else {
+										await ops.writeFile(absolutePath, content);
+									}
 									if (aborted) return;
 									signal?.removeEventListener("abort", onAbort);
+									const verb = mode === "append" ? "appended" : "wrote";
 									resolve({
 										content: [
-											{ type: "text", text: `Successfully wrote ${content.length} bytes to ${path}` },
+											{ type: "text", text: `Successfully ${verb} ${content.length} bytes to ${path}` },
 										],
 										details: undefined,
 									});

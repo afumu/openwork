@@ -2,8 +2,8 @@
   "apps": {
     "name": "openwork",
     "script": "./dist/main.js",
-    "watch": true,
-    "ignore_watch": ["node_modules", "logs", "public/file"],
+    "watch": false,
+    "ignore_watch": ["node_modules", "logs", "public/file", ".wechat-cover-cache", "mind"],
     "env": {
       "TZ": "Asia/Shanghai"
     },

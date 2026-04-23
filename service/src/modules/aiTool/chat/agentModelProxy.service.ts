@@ -50,6 +50,11 @@ type UpstreamFailure = {
 };
 
 type UpstreamResult = UpstreamSuccess | UpstreamFailure;
+type UpstreamApiFormat = 'anthropic' | 'openai';
+type AnthropicUsagePayload = {
+  input_tokens?: number;
+  output_tokens?: number;
+};
 
 @Injectable()
 export class AgentModelProxyService {
@@ -119,22 +124,16 @@ export class AgentModelProxyService {
     }
 
     const baseUrl = await correctApiBaseUrl(modelDetail.proxyUrl || openaiBaseUrl);
-    const upstreamUrl = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
-    const upstreamBody: Record<string, any> = {
-      ...body,
-      model: modelDetail.model || claims.model,
-      ...(body?.stream === true
-        ? {
-            stream_options: {
-              ...(body?.stream_options || {}),
-              include_usage: true,
-            },
-          }
-        : {}),
-    };
+    const apiFormat = this.resolveApiFormat(modelDetail?.apiFormat);
+    const upstreamUrl = this.buildUpstreamUrl(baseUrl, apiFormat);
+    const upstreamBody = this.buildUpstreamBody(body, {
+      apiFormat,
+      resolvedModel: modelDetail.model || claims.model,
+    });
     const upstreamBodyText = JSON.stringify(upstreamBody);
     Logger.debug(
       `[traceId=${claims.traceId || '-'}] agent model proxy request prepared | ${JSON.stringify({
+        apiFormat,
         agentRunId: claims.agentRunId,
         bodyBytes: Buffer.byteLength(upstreamBodyText),
         maxTokens: upstreamBody.max_tokens ?? null,
@@ -150,10 +149,7 @@ export class AgentModelProxyService {
       upstreamUrl,
       {
         body: upstreamBodyText,
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
+        headers: this.buildUpstreamHeaders(apiFormat, apiKey),
         method: 'POST',
       },
       {
@@ -177,16 +173,30 @@ export class AgentModelProxyService {
 
     const upstream = upstreamResult.response;
     res.status(upstream.status);
-    upstream.headers.forEach((value, key) => {
-      if (
-        !['content-encoding', 'content-length', 'transfer-encoding'].includes(key.toLowerCase())
-      ) {
-        res.setHeader(key, value);
-      }
-    });
+    if (apiFormat === 'anthropic') {
+      res.setHeader(
+        'Content-Type',
+        body?.stream === true ? 'text/event-stream' : 'application/json',
+      );
+    } else {
+      upstream.headers.forEach((value, key) => {
+        if (
+          !['content-encoding', 'content-length', 'transfer-encoding'].includes(key.toLowerCase())
+        ) {
+          res.setHeader(key, value);
+        }
+      });
+    }
 
     if (body?.stream === true && upstream.body) {
-      await this.pipeStreamingResponse(claims.agentRunId, upstream, res);
+      await this.pipeStreamingResponse(
+        claims.agentRunId,
+        upstream,
+        res,
+        apiFormat,
+        modelDetail.model || claims.model,
+        body,
+      );
       return;
     }
 
@@ -194,8 +204,16 @@ export class AgentModelProxyService {
       const text = await upstream.text().catch(() => '');
       return text ? { error: { message: text } } : {};
     });
-    await this.recordUsage(claims.agentRunId, data?.usage);
-    res.json(data);
+    const normalizedData =
+      apiFormat === 'anthropic'
+        ? this.convertAnthropicResponseToOpenAi(
+            data,
+            modelDetail.model || claims.model,
+            body?.messages,
+          )
+        : data;
+    await this.recordUsage(claims.agentRunId, normalizedData?.usage);
+    res.json(normalizedData);
   }
 
   private async fetchUpstreamWithRetry(
@@ -422,7 +440,10 @@ export class AgentModelProxyService {
     );
   }
 
-  private async recordUsage(agentRunId: string, usage?: OpenAiUsagePayload | null) {
+  private async recordUsage(
+    agentRunId: string,
+    usage?: OpenAiUsagePayload | AnthropicUsagePayload | null,
+  ) {
     if (!usage) {
       return;
     }
@@ -432,7 +453,7 @@ export class AgentModelProxyService {
       return;
     }
 
-    recordOpenAiUsage(ledger, usage);
+    recordOpenAiUsage(ledger, this.normalizeUsagePayload(usage));
     await this.saveLedger(ledger);
   }
 
@@ -440,7 +461,15 @@ export class AgentModelProxyService {
     agentRunId: string,
     upstream: globalThis.Response,
     res: Response,
+    apiFormat: UpstreamApiFormat = 'openai',
+    model = '',
+    requestBody: Record<string, any> = {},
   ) {
+    if (apiFormat === 'anthropic') {
+      await this.pipeAnthropicStreamingResponse(agentRunId, upstream, res, model, requestBody);
+      return;
+    }
+
     res.setHeader('Content-Type', upstream.headers.get('content-type') || 'text/event-stream');
     const reader = upstream.body?.getReader();
     if (!reader) {
@@ -506,5 +535,526 @@ export class AgentModelProxyService {
       settled: ledger.settled,
       totalTokens: ledger.totalTokens,
     };
+  }
+
+  private resolveApiFormat(value: unknown): UpstreamApiFormat {
+    return String(value || '').toLowerCase() === 'anthropic' ? 'anthropic' : 'openai';
+  }
+
+  private buildUpstreamUrl(baseUrl: string, apiFormat: UpstreamApiFormat) {
+    const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
+    return apiFormat === 'anthropic'
+      ? `${normalizedBaseUrl}/messages`
+      : `${normalizedBaseUrl}/chat/completions`;
+  }
+
+  private buildUpstreamHeaders(apiFormat: UpstreamApiFormat, apiKey: string) {
+    if (apiFormat === 'anthropic') {
+      return {
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+        'x-api-key': apiKey,
+      };
+    }
+
+    return {
+      authorization: `Bearer ${apiKey}`,
+      'content-type': 'application/json',
+    };
+  }
+
+  private buildUpstreamBody(
+    body: Record<string, any>,
+    input: {
+      apiFormat: UpstreamApiFormat;
+      resolvedModel: string;
+    },
+  ) {
+    if (input.apiFormat === 'anthropic') {
+      return this.buildAnthropicRequestBody(body, input.resolvedModel);
+    }
+
+    return {
+      ...body,
+      model: input.resolvedModel,
+      ...(body?.stream === true
+        ? {
+            stream_options: {
+              ...(body?.stream_options || {}),
+              include_usage: true,
+            },
+          }
+        : {}),
+    };
+  }
+
+  private buildAnthropicRequestBody(body: Record<string, any>, resolvedModel: string) {
+    const messages = Array.isArray(body?.messages) ? body.messages : [];
+    const systemParts: string[] = [];
+    const anthropicMessages: Array<Record<string, any>> = [];
+
+    for (const message of messages) {
+      if (!message || typeof message !== 'object') {
+        continue;
+      }
+
+      if (message.role === 'system') {
+        const systemText = this.extractTextFromContent(message.content);
+        if (systemText) {
+          systemParts.push(systemText);
+        }
+        continue;
+      }
+
+      if (message.role === 'tool') {
+        anthropicMessages.push({
+          content: [
+            {
+              content: this.extractTextFromContent(message.content) || '',
+              tool_use_id: String(message.tool_call_id || message.toolCallId || ''),
+              type: 'tool_result',
+            },
+          ],
+          role: 'user',
+        });
+        continue;
+      }
+
+      const mappedMessage = this.mapMessageToAnthropic(message);
+      if (mappedMessage) {
+        anthropicMessages.push(mappedMessage);
+      }
+    }
+
+    const requestBody: Record<string, any> = {
+      max_tokens: Number(body?.max_tokens) > 0 ? Number(body.max_tokens) : 4096,
+      messages: anthropicMessages,
+      model: resolvedModel,
+      stream: body?.stream === true,
+    };
+
+    if (systemParts.length > 0) {
+      requestBody.system = systemParts.join('\n\n');
+    }
+    if (typeof body?.temperature === 'number') {
+      requestBody.temperature = body.temperature;
+    }
+    if (Array.isArray(body?.tools) && body.tools.length > 0) {
+      requestBody.tools = body.tools
+        .map((tool: any) => {
+          if (tool?.type !== 'function' || !tool.function?.name) {
+            return null;
+          }
+          return {
+            description: tool.function.description || '',
+            input_schema: tool.function.parameters || {
+              additionalProperties: false,
+              properties: {},
+              type: 'object',
+            },
+            name: tool.function.name,
+          };
+        })
+        .filter(Boolean);
+    }
+    if (body?.tool_choice && body.tool_choice !== 'none') {
+      requestBody.tool_choice =
+        typeof body.tool_choice === 'string'
+          ? { type: body.tool_choice === 'required' ? 'any' : 'auto' }
+          : body.tool_choice?.function?.name
+            ? { name: body.tool_choice.function.name, type: 'tool' }
+            : { type: 'auto' };
+    }
+
+    return requestBody;
+  }
+
+  private mapMessageToAnthropic(message: Record<string, any>) {
+    const role = message.role === 'assistant' ? 'assistant' : 'user';
+    const contentBlocks: Array<Record<string, any>> = this.convertContentToAnthropicBlocks(
+      message.content,
+    );
+
+    if (message.role === 'assistant' && Array.isArray(message.tool_calls)) {
+      for (const toolCall of message.tool_calls) {
+        contentBlocks.push({
+          id: toolCall.id,
+          input: this.safeParseJson(toolCall?.function?.arguments) || {},
+          name: toolCall?.function?.name || '',
+          type: 'tool_use',
+        });
+      }
+    }
+
+    if (contentBlocks.length === 0) {
+      return null;
+    }
+
+    if (contentBlocks.every(block => block.type === 'text')) {
+      return {
+        content: contentBlocks.map(block => block.text).join('\n'),
+        role,
+      };
+    }
+
+    return {
+      content: contentBlocks,
+      role,
+    };
+  }
+
+  private convertContentToAnthropicBlocks(content: any) {
+    if (typeof content === 'string') {
+      return content ? [{ text: content, type: 'text' }] : [];
+    }
+
+    if (!Array.isArray(content)) {
+      return [];
+    }
+
+    return content
+      .map(item => {
+        if (!item || typeof item !== 'object') {
+          return null;
+        }
+        if (item.type === 'text' && item.text) {
+          return { text: item.text, type: 'text' };
+        }
+        if (item.type === 'input_text' && item.text) {
+          return { text: item.text, type: 'text' };
+        }
+        return null;
+      })
+      .filter(Boolean) as Array<{ text: string; type: 'text' }>;
+  }
+
+  private extractTextFromContent(content: any) {
+    if (typeof content === 'string') {
+      return content;
+    }
+
+    if (!Array.isArray(content)) {
+      return '';
+    }
+
+    return content
+      .map(item => {
+        if (!item || typeof item !== 'object') {
+          return '';
+        }
+        return item.text || item.content || '';
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  private safeParseJson(value: unknown) {
+    if (typeof value !== 'string' || !value.trim()) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+
+  private convertAnthropicResponseToOpenAi(
+    data: Record<string, any>,
+    model: string,
+    requestMessages?: any[],
+  ) {
+    const contentBlocks = Array.isArray(data?.content) ? data.content : [];
+    const textContent = contentBlocks
+      .filter(block => block?.type === 'text')
+      .map(block => block.text || '')
+      .join('');
+    const toolCalls = contentBlocks
+      .filter(block => block?.type === 'tool_use')
+      .map((block, index) => ({
+        id: block.id || `call_${index}`,
+        index,
+        type: 'function',
+        function: {
+          arguments: JSON.stringify(block.input || {}),
+          name: block.name || '',
+        },
+      }));
+
+    return {
+      id: data?.id || `chatcmpl-${randomUUID()}`,
+      object: 'chat.completion',
+      created: Math.floor(Date.now() / 1000),
+      model,
+      choices: [
+        {
+          index: 0,
+          finish_reason: this.mapAnthropicStopReason(data?.stop_reason),
+          message: {
+            role: 'assistant',
+            content: textContent || null,
+            ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+          },
+        },
+      ],
+      usage: this.normalizeUsagePayload(data?.usage),
+      system_fingerprint: this.buildSystemFingerprint(requestMessages),
+    };
+  }
+
+  private buildSystemFingerprint(messages?: any[]) {
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return undefined;
+    }
+    return 'anthropic-proxy';
+  }
+
+  private mapAnthropicStopReason(stopReason: unknown) {
+    switch (stopReason) {
+      case 'max_tokens':
+        return 'length';
+      case 'tool_use':
+        return 'tool_calls';
+      case 'end_turn':
+      default:
+        return 'stop';
+    }
+  }
+
+  private normalizeUsagePayload(
+    usage?: OpenAiUsagePayload | AnthropicUsagePayload | null,
+  ): OpenAiUsagePayload | null {
+    if (!usage) {
+      return null;
+    }
+
+    if ('prompt_tokens' in usage || 'completion_tokens' in usage || 'total_tokens' in usage) {
+      return {
+        completion_tokens: Number(usage.completion_tokens || 0),
+        prompt_tokens: Number(usage.prompt_tokens || 0),
+        total_tokens: Number(
+          usage.total_tokens ||
+            Number(usage.prompt_tokens || 0) + Number(usage.completion_tokens || 0),
+        ),
+      };
+    }
+
+    const anthropicUsage = usage as AnthropicUsagePayload;
+    const promptTokens = Number(anthropicUsage.input_tokens || 0);
+    const completionTokens = Number(anthropicUsage.output_tokens || 0);
+    return {
+      completion_tokens: completionTokens,
+      prompt_tokens: promptTokens,
+      total_tokens: promptTokens + completionTokens,
+    };
+  }
+
+  private async pipeAnthropicStreamingResponse(
+    agentRunId: string,
+    upstream: globalThis.Response,
+    res: Response,
+    model: string,
+    requestBody: Record<string, any>,
+  ) {
+    res.setHeader('Content-Type', 'text/event-stream');
+    const reader = upstream.body?.getReader();
+    if (!reader) {
+      res.end();
+      return;
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+    const streamId = `chatcmpl-${randomUUID()}`;
+    const created = Math.floor(Date.now() / 1000);
+    let usage: OpenAiUsagePayload | null = null;
+    let finishReason: string | null = null;
+    let roleSent = false;
+
+    const writeChunk = (payload: Record<string, any> | '[DONE]') => {
+      if (payload === '[DONE]') {
+        res.write('data: [DONE]\n\n');
+        return;
+      }
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split('\n\n');
+      buffer = events.pop() || '';
+
+      for (const event of events) {
+        const parsed = this.parseServerSentEvent(event);
+        if (!parsed) {
+          continue;
+        }
+
+        if (!roleSent && parsed.type === 'message_start') {
+          roleSent = true;
+          usage = this.normalizeUsagePayload(parsed.message?.usage);
+          writeChunk({
+            id: streamId,
+            object: 'chat.completion.chunk',
+            created,
+            model,
+            choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }],
+          });
+          continue;
+        }
+
+        if (parsed.type === 'content_block_delta' && parsed.delta?.type === 'text_delta') {
+          writeChunk({
+            id: streamId,
+            object: 'chat.completion.chunk',
+            created,
+            model,
+            choices: [
+              {
+                index: 0,
+                delta: { content: parsed.delta.text || '' },
+                finish_reason: null,
+              },
+            ],
+          });
+          continue;
+        }
+
+        if (parsed.type === 'content_block_start' && parsed.content_block?.type === 'tool_use') {
+          writeChunk({
+            id: streamId,
+            object: 'chat.completion.chunk',
+            created,
+            model,
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  tool_calls: [
+                    {
+                      index: parsed.index || 0,
+                      id: parsed.content_block.id || `call_${parsed.index || 0}`,
+                      type: 'function',
+                      function: {
+                        name: parsed.content_block.name || '',
+                        arguments: '',
+                      },
+                    },
+                  ],
+                },
+                finish_reason: null,
+              },
+            ],
+          });
+          continue;
+        }
+
+        if (parsed.type === 'content_block_delta' && parsed.delta?.type === 'input_json_delta') {
+          writeChunk({
+            id: streamId,
+            object: 'chat.completion.chunk',
+            created,
+            model,
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  tool_calls: [
+                    {
+                      index: parsed.index || 0,
+                      function: {
+                        arguments: parsed.delta.partial_json || '',
+                      },
+                    },
+                  ],
+                },
+                finish_reason: null,
+              },
+            ],
+          });
+          continue;
+        }
+
+        if (parsed.type === 'message_delta') {
+          const normalizedUsage = this.normalizeUsagePayload(parsed.usage);
+          if (normalizedUsage) {
+            usage = {
+              completion_tokens: Number(
+                normalizedUsage.completion_tokens || usage?.completion_tokens || 0,
+              ),
+              prompt_tokens: Number(normalizedUsage.prompt_tokens || usage?.prompt_tokens || 0),
+              total_tokens:
+                Number(normalizedUsage.prompt_tokens || usage?.prompt_tokens || 0) +
+                Number(normalizedUsage.completion_tokens || usage?.completion_tokens || 0),
+            };
+          }
+          finishReason = this.mapAnthropicStopReason(parsed.delta?.stop_reason);
+        }
+      }
+    }
+
+    buffer += decoder.decode();
+
+    writeChunk({
+      id: streamId,
+      object: 'chat.completion.chunk',
+      created,
+      model,
+      choices: [
+        {
+          index: 0,
+          delta: {},
+          finish_reason: finishReason || 'stop',
+        },
+      ],
+    });
+
+    if (requestBody?.stream_options?.include_usage === true && usage) {
+      writeChunk({
+        id: streamId,
+        object: 'chat.completion.chunk',
+        created,
+        model,
+        choices: [],
+        usage,
+      });
+    }
+
+    writeChunk('[DONE]');
+    await this.recordUsage(agentRunId, usage);
+    res.end();
+  }
+
+  private parseServerSentEvent(rawEvent: string) {
+    const dataLines: string[] = [];
+
+    for (const line of rawEvent.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data:')) {
+        continue;
+      }
+      dataLines.push(trimmed.slice(5).trim());
+    }
+
+    if (dataLines.length === 0) {
+      return null;
+    }
+
+    const payload = dataLines.join('\n');
+    if (!payload || payload === '[DONE]') {
+      return null;
+    }
+
+    try {
+      return JSON.parse(payload);
+    } catch {
+      return null;
+    }
   }
 }

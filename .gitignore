@@ -11,6 +11,14 @@ coverage/
 **/coverage/
 .nyc_output/
 /deploy/
+!/deploy/
+/deploy/*
+!/deploy/.gitignore
+!/deploy/start.sh
+!/deploy/pi-runtime/
+/deploy/pi-runtime/*
+!/deploy/pi-runtime/setup.sh
+!/deploy/pi-runtime/check.sh
 release/
 
 # Frontend and tool caches

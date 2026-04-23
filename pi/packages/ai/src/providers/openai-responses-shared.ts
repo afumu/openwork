@@ -290,6 +290,10 @@ export async function processResponsesStream<TApi extends Api>(
 	let currentBlock: ThinkingContent | TextContent | (ToolCall & { partialJson: string }) | null = null;
 	const blocks = output.content;
 	const blockIndex = () => blocks.length - 1;
+	const pendingToolCalls: Array<{
+		block: ToolCall & { partialJson: string };
+		toolCall: ToolCall;
+	}> = [];
 
 	for await (const event of openaiStream) {
 		if (event.type === "response.created") {
@@ -459,8 +463,10 @@ export async function processResponsesStream<TApi extends Api>(
 					arguments: args,
 				};
 
+				if (currentBlock?.type === "toolCall") {
+					pendingToolCalls.push({ block: currentBlock, toolCall });
+				}
 				currentBlock = null;
-				stream.push({ type: "toolcall_end", contentIndex: blockIndex(), toolCall, partial: output });
 			}
 		} else if (event.type === "response.completed") {
 			const response = event.response;
@@ -486,6 +492,27 @@ export async function processResponsesStream<TApi extends Api>(
 			}
 			// Map status to stop reason
 			output.stopReason = mapStopReason(response?.status);
+			if (output.stopReason === "length") {
+				for (const pending of pendingToolCalls) {
+					const index = output.content.indexOf(pending.block);
+					if (index !== -1) {
+						output.content.splice(index, 1);
+					}
+				}
+			} else {
+				for (const pending of pendingToolCalls) {
+					const index = output.content.indexOf(pending.block);
+					if (index === -1) continue;
+					output.content[index] = pending.toolCall;
+					stream.push({
+						type: "toolcall_end",
+						contentIndex: index,
+						toolCall: pending.toolCall,
+						partial: output,
+					});
+				}
+			}
+			pendingToolCalls.length = 0;
 			if (output.content.some((b) => b.type === "toolCall") && output.stopReason === "stop") {
 				output.stopReason = "toolUse";
 			}

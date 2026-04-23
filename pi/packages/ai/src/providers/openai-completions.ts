@@ -274,7 +274,15 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions", OpenA
 				}
 			}
 
-			finishCurrentBlock(currentBlock);
+			if (currentBlock?.type === "toolCall" && output.stopReason === "length") {
+				const lastBlock = output.content[output.content.length - 1];
+				if (lastBlock === currentBlock) {
+					output.content.pop();
+				}
+				currentBlock = null;
+			} else {
+				finishCurrentBlock(currentBlock);
+			}
 			if (options?.signal?.aborted) {
 				throw new Error("Request was aborted");
 			}

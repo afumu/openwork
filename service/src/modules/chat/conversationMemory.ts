@@ -92,11 +92,132 @@ export function stringifyConversationContent(content: any) {
   }
 }
 
+function truncateConversationSnippet(value: string, maxChars = 240) {
+  const normalized = String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalized) return '';
+  return normalized.length > maxChars ? `${normalized.slice(0, maxChars)}...` : normalized;
+}
+
+function parseToolExecutionPayload(raw: any): any[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function summarizeWorkflowExecution(raw: any) {
+  const items = parseToolExecutionPayload(raw);
+  const workflowItem = [...items]
+    .reverse()
+    .find(
+      item =>
+        item &&
+        typeof item === 'object' &&
+        (item.kind === 'workflow_step' ||
+          item.tool_name === 'openwork_step' ||
+          item.tool_name === 'context_compression'),
+    );
+
+  if (!workflowItem) return null;
+
+  return {
+    stepTitle: String(
+      workflowItem.display_title ||
+        workflowItem.step_title ||
+        workflowItem.step ||
+        workflowItem.tool_name ||
+        'workflow',
+    )
+      .replace(/^\[\d+\/\d+\]\s*/u, '')
+      .trim(),
+    subtitle: truncateConversationSnippet(
+      workflowItem.display_subtitle ||
+        workflowItem.result_preview ||
+        workflowItem.args_preview ||
+        '',
+      160,
+    ),
+    target: truncateConversationSnippet(workflowItem.target || '', 180),
+  };
+}
+
+export function buildConversationTaskStateSnapshot(records: ConversationMemoryRecord[]) {
+  const reversed = [...records].reverse();
+  const latestUser = reversed.find(
+    record => record.role === 'user' && String(record.content || '').trim(),
+  );
+  const latestAssistant = reversed.find(
+    record => record.role === 'assistant' && String(record.content || '').trim(),
+  );
+  const latestProgress = reversed.find(record => String(record.progress || '').trim());
+  const latestWorkflow = reversed
+    .map(record => summarizeWorkflowExecution(record.tool_execution))
+    .find(item => Boolean(item));
+  const latestReasoning = reversed.find(record => String(record.reasoningText || '').trim());
+  const interruptedAssistant = reversed.find(record =>
+    /任务出现了中断|operation was aborted|继续接着操作/iu.test(String(record.content || '')),
+  );
+
+  const lines = [
+    latestUser
+      ? `- 最近用户目标：${truncateConversationSnippet(
+          stringifyConversationContent(latestUser.content),
+          180,
+        )}`
+      : undefined,
+    latestWorkflow?.stepTitle ? `- 当前工作流步骤：${latestWorkflow.stepTitle}` : undefined,
+    latestWorkflow?.subtitle ? `- 当前步骤说明：${latestWorkflow.subtitle}` : undefined,
+    latestProgress ? `- 当前进度：${String(latestProgress.progress).trim()}%` : undefined,
+    latestWorkflow?.target ? `- 关键产物：${latestWorkflow.target}` : undefined,
+    interruptedAssistant
+      ? `- 最近中断信号：${truncateConversationSnippet(
+          String(interruptedAssistant.content || ''),
+          160,
+        )}`
+      : undefined,
+    latestReasoning
+      ? `- 最近推理重点：${truncateConversationSnippet(
+          String(latestReasoning.reasoningText || ''),
+          180,
+        )}`
+      : undefined,
+    latestAssistant
+      ? `- 最近助手状态：${truncateConversationSnippet(String(latestAssistant.content || ''), 180)}`
+      : undefined,
+  ].filter((line): line is string => Boolean(line));
+
+  return lines.join('\n');
+}
+
 export function formatMessagesForSummary(records: ConversationMemoryRecord[]) {
   return records
     .map(record => {
       const id = record.id ? `#${record.id} ` : '';
-      return `${id}${record.role}: ${stringifyConversationContent(record.content)}`;
+      const workflow = summarizeWorkflowExecution(record.tool_execution);
+      const extras = [
+        record.reasoningText
+          ? `[reasoning] ${truncateConversationSnippet(String(record.reasoningText || ''), 180)}`
+          : undefined,
+        record.progress ? `[progress] ${String(record.progress).trim()}` : undefined,
+        workflow
+          ? `[workflow] ${[workflow.stepTitle, workflow.subtitle, workflow.target]
+              .filter(Boolean)
+              .join(' | ')}`
+          : undefined,
+      ]
+        .filter((line): line is string => Boolean(line))
+        .join('\n');
+
+      return `${id}${record.role}: ${stringifyConversationContent(record.content)}${
+        extras ? `\n${extras}` : ''
+      }`;
     })
     .join('\n\n');
 }

@@ -210,6 +210,20 @@ describe("Coding Agent Tools", () => {
 
 			expect(getTextOutput(result)).toContain("Successfully wrote");
 		});
+
+		it("should append file contents when mode is append", async () => {
+			const testFile = join(testDir, "append-test.txt");
+			writeFileSync(testFile, "First chunk\n");
+
+			const result = await writeTool.execute("test-call-append", {
+				path: testFile,
+				content: "Second chunk\n",
+				mode: "append",
+			});
+
+			expect(getTextOutput(result)).toContain("Successfully appended");
+			expect(readFileSync(testFile, "utf-8")).toBe("First chunk\nSecond chunk\n");
+		});
 	});
 
 	describe("edit tool", () => {

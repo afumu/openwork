@@ -34,6 +34,10 @@ meta:
   const visible = ref(false);
   const loading = ref(false);
   const modelLoading = ref(false);
+  const apiFormatOptions = [
+    { label: 'OpenAI 兼容', value: 'openai' },
+    { label: 'Anthropic Messages', value: 'anthropic' },
+  ];
 
   const formInline = reactive({
     keyType: '',
@@ -65,6 +69,7 @@ meta:
     maxModelTokens: 64000,
     max_tokens: 4096,
     proxyUrl: '',
+    apiFormat: 'openai',
     timeout: 300,
     deduct: 1,
     deductType: 1,
@@ -162,6 +167,7 @@ meta:
     maxModelTokens: [{ required: true, message: '请填写模型最大token数', trigger: 'blur' }],
     max_tokens: [{ required: true, message: '请填写模型最大回复token数', trigger: 'blur' }],
     proxyUrl: [{ required: false, message: '请填写指定代理地址', trigger: 'blur' }],
+    apiFormat: [{ required: true, message: '请选择接口格式', trigger: 'change' }],
     modelAvatar: [
       {
         required: false,
@@ -284,6 +290,7 @@ meta:
       maxModelTokens,
       max_tokens,
       proxyUrl,
+      apiFormat,
       timeout,
       deductType,
       deduct,
@@ -314,6 +321,7 @@ meta:
         maxModelTokens,
         max_tokens,
         proxyUrl,
+        apiFormat: apiFormat || 'openai',
         timeout,
         deductType,
         deduct,
@@ -505,8 +513,8 @@ meta:
         <div class="text-sm/6">
           <div>模型分为（基础对话｜创意模型｜特殊模型三类）。</div>
           <div>
-            基础对话：用户可以在用户端选择的模型，用于对话、问答、聊天等功能，仅支持 OpenAI Chat
-            格式，其他模型需自行使用分发程序适配。
+            基础对话：用户可以在用户端选择的模型，用于对话、问答、聊天等功能。后台支持 OpenAI
+            兼容格式和 Anthropic Messages 格式。
           </div>
           <div>
             创意模型：用户端不展示，包含【Midjourney 绘图】【Dalle 绘图】【SDXL
@@ -607,6 +615,13 @@ meta:
           <template #default="scope">
             <el-tag :type="scope.row.model.includes('gpt-4') ? 'success' : 'info'">
               {{ scope.row.model }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="apiFormat" align="center" label="接口格式" width="140">
+          <template #default="scope">
+            <el-tag :type="scope.row.apiFormat === 'anthropic' ? 'warning' : 'success'">
+              {{ scope.row.apiFormat === 'anthropic' ? 'Anthropic' : 'OpenAI' }}
             </el-tag>
           </template>
         </el-table-column>
@@ -844,6 +859,24 @@ meta:
           <div v-if="actualProxyUrl" class="text-xs text-gray-400 mt-1">
             实际调用地址：{{ actualProxyUrl }}
           </div>
+        </el-form-item>
+        <el-form-item label="接口格式" prop="apiFormat">
+          <el-radio-group v-model="formPackage.apiFormat">
+            <el-radio v-for="item in apiFormatOptions" :key="item.value" :label="item.value">
+              {{ item.label }}
+            </el-radio>
+          </el-radio-group>
+          <el-tooltip class="box-item" effect="dark" placement="right">
+            <template #content>
+              <div style="width: 260px">
+                OpenAI 兼容格式会走 /chat/completions；Anthropic 格式会走
+                /messages，并由系统自动做兼容转换。
+              </div>
+            </template>
+            <el-icon class="ml-3 cursor-pointer">
+              <QuestionFilled />
+            </el-icon>
+          </el-tooltip>
         </el-form-item>
         <el-form-item label="模型密钥" prop="key">
           <el-input v-model="formPackage.key" type="text" placeholder="请填写模型Key" />

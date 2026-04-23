@@ -47,6 +47,13 @@ export class SetModelDto {
   })
   proxyUrl: string;
 
+  @ApiProperty({
+    example: 'openai',
+    description: '接口格式: openai | anthropic',
+    required: false,
+  })
+  apiFormat: string;
+
   @ApiProperty({ example: 300, description: '模型超时时间', required: false })
   timeout: number;
 

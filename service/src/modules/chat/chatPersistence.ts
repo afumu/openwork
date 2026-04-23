@@ -14,6 +14,10 @@ export function looksLikeTransientAssistantFailure(content: string) {
   return TRANSIENT_ASSISTANT_FAILURE_PATTERNS.some(pattern => pattern.test(normalized));
 }
 
+export function shouldTreatAssistantResponseAsInterrupted(data: any) {
+  return Boolean(data?.errMsg) || String(data?.finishReason || '').trim() === 'length';
+}
+
 export function buildAssistantFailureLogUpdate(data: any) {
   const fullContent = String(data?.full_content || '').trim();
   const update: Record<string, any> = {

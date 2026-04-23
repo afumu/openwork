@@ -1413,7 +1413,7 @@ export class OpenAIChatService {
       if (shouldEndRequest) {
         result.content = '';
         result.reasoning_content = '';
-        result.finishReason = 'stop';
+        result.finishReason = result.finishReason || 'stop';
         return result;
       }
 
@@ -1453,7 +1453,7 @@ export class OpenAIChatService {
           text: '',
         },
       ];
-      result.finishReason = 'stop';
+      result.finishReason = result.finishReason || 'stop';
 
       return result;
     } catch (error) {

@@ -3,9 +3,11 @@ declare const expect: any;
 declare const it: any;
 
 import {
+  buildConversationTaskStateSnapshot,
   buildConversationMemoryBlock,
   chunkMessagesForSummary,
   CONVERSATION_SUMMARY_MESSAGE_TYPE,
+  formatMessagesForSummary,
   isConversationSummaryLog,
   parseConversationSummaryMetadata,
   selectMessagesForSummary,
@@ -62,5 +64,36 @@ describe('conversation memory helpers', () => {
 
     expect(chunks.length).toBeGreaterThan(1);
     expect(chunks.flat().map(record => record.id)).toEqual([1, 2, 3]);
+  });
+
+  it('preserves workflow task state when formatting messages for summarization', () => {
+    const records = [
+      {
+        id: 1,
+        role: 'user',
+        content: '继续生成市场报告。',
+      },
+      {
+        id: 2,
+        role: 'assistant',
+        content: '正在处理。',
+        progress: '45',
+        reasoningText: '当前重点是保留已经完成的检索结果。',
+        tool_execution: JSON.stringify([
+          {
+            kind: 'workflow_step',
+            tool_name: 'openwork_step',
+            display_title: '[2/4] 资料整理',
+            display_subtitle: '正在整理证据表',
+            target: 'data/report/evidence.md',
+          },
+        ]),
+      },
+    ];
+
+    expect(buildConversationTaskStateSnapshot(records)).toContain('当前工作流步骤：资料整理');
+    expect(buildConversationTaskStateSnapshot(records)).toContain('关键产物：data/report/evidence.md');
+    expect(formatMessagesForSummary(records)).toContain('[workflow] 资料整理');
+    expect(formatMessagesForSummary(records)).toContain('[progress] 45');
   });
 });
