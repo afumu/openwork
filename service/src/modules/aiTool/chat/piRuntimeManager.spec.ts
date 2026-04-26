@@ -7,6 +7,7 @@ import {
   resolveConversationWorkspace,
   resolveRuntimeBootstrapAgentFiles,
   resolveRuntimeWorkspacePath,
+  unwrapRuntimeCommandStdout,
 } from './piRuntimeManager';
 
 declare const describe: any;
@@ -50,6 +51,18 @@ describe('piRuntimeManager helpers', () => {
     expect(resolveRuntimeWorkspacePath('/workspace/', '/conversations/128')).toBe(
       '/workspace/conversations/128',
     );
+  });
+
+  test('unwrapRuntimeCommandStdout removes the cwd marker without using API status codes', () => {
+    expect(
+      unwrapRuntimeCommandStdout(
+        'file-a\n__OPENWORK_RUNTIME_CWD__:/workspace/conversations/128/src\n',
+        '/workspace/conversations/128',
+      ),
+    ).toEqual({
+      cwd: '/workspace/conversations/128/src',
+      stdout: 'file-a',
+    });
   });
 
   test('resolveRuntimeBundleHostPath falls back to user home on darwin', () => {
@@ -192,7 +205,7 @@ describe('piRuntimeManager helpers', () => {
     });
     service.runDocker = jest.fn().mockResolvedValue({
       stderr: '',
-      stdout: '/workspace/conversations/128\n',
+      stdout: '/workspace/conversations/128\n__OPENWORK_RUNTIME_CWD__:/workspace/conversations/128\n',
     });
 
     await expect(
@@ -204,7 +217,7 @@ describe('piRuntimeManager helpers', () => {
       cwd: '/workspace/conversations/128',
       mode: 'docker',
       stderr: '',
-      stdout: '/workspace/conversations/128\n',
+      stdout: '/workspace/conversations/128',
     });
     expect(service.runDocker).toHaveBeenCalledWith(
       [
@@ -212,7 +225,17 @@ describe('piRuntimeManager helpers', () => {
         'openwork-user-42-group-128',
         'sh',
         '-lc',
-        "mkdir -p '/workspace/conversations/128' && cd '/workspace/conversations/128' && pwd",
+        [
+          "mkdir -p '/workspace/conversations/128' && cd '/workspace/conversations/128'",
+          'll() { ls -la "$@"; }',
+          'la() { ls -A "$@"; }',
+          'l() { ls -CF "$@"; }',
+          'cd() { if [ "$#" -eq 0 ]; then command cd \'/workspace/conversations/128\'; else command cd "$@"; fi; }',
+          'pwd',
+          '__openwork_exit_code=$?',
+          "printf '\\n__OPENWORK_RUNTIME_CWD__:%s\\n' \"$PWD\"",
+          'exit $__openwork_exit_code',
+        ].join('\n'),
       ],
       'trace-1',
       false,

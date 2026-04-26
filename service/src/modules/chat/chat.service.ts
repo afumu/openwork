@@ -400,7 +400,7 @@ export class ChatService {
     };
   }
 
-  async runtimeExec(body: { groupId?: number; command?: string }, req?: Request) {
+  async runtimeExec(body: { groupId?: number; command?: string; cwd?: string }, req?: Request) {
     const traceId = this.createTraceId(req?.user?.id, body?.groupId);
     const groupId = Number(body?.groupId || 0);
     const command = String(body?.command || '').trim();
@@ -419,6 +419,7 @@ export class ChatService {
         groupId,
         command,
         traceId,
+        body?.cwd,
       ),
       success: true,
     };

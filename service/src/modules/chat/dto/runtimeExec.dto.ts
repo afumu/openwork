@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsString, MaxLength, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 export class RuntimeExecDto {
   @ApiProperty({ example: 128, description: '当前对话 groupId' })
@@ -11,4 +11,14 @@ export class RuntimeExecDto {
   @IsString()
   @MaxLength(4000)
   command: string;
+
+  @ApiProperty({
+    example: '/workspace/conversations/128/src',
+    description: '终端当前工作目录；为空时使用当前对话工作区根目录',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  cwd?: string;
 }

@@ -28,6 +28,17 @@ export interface ToolExecutionLike {
   tool_name?: string
 }
 
+export interface RuntimeCommandResult {
+  code: number
+  command?: string
+  containerName?: string
+  cwd?: string
+  mode?: 'docker'
+  stderr?: string
+  stdout?: string
+  timedOut?: boolean
+}
+
 export type CodeLanguage =
   | 'css'
   | 'html'
@@ -108,6 +119,23 @@ export function toTerminalLines(records: ToolExecutionLike[]) {
     const detail = record.args_preview || record.target || record.result_preview || ''
     return ['$ ', name, ' ', phase, detail ? ` ${detail}` : ''].join('')
   })
+}
+
+export function unwrapRuntimeCommandPayload(payload: any): RuntimeCommandResult | null {
+  if (!payload || typeof payload !== 'object') return null
+  if (isRuntimeCommandResult(payload)) return payload
+  if ('data' in payload) return unwrapRuntimeCommandPayload(payload.data)
+  return null
+}
+
+function isRuntimeCommandResult(payload: any): payload is RuntimeCommandResult {
+  return (
+    typeof payload?.code === 'number' &&
+    (typeof payload.command === 'string' ||
+      typeof payload.stdout === 'string' ||
+      typeof payload.stderr === 'string' ||
+      typeof payload.cwd === 'string')
+  )
 }
 
 function getExtension(path: string) {

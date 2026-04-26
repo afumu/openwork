@@ -9,6 +9,7 @@ export function fetchRuntimeStatusAPI<T>(data: { groupId: number }): Promise<T> 
 
 export function executeRuntimeCommandAPI<T>(data: {
   command: string
+  cwd?: string
   groupId: number
 }): Promise<T> {
   return post<T>({

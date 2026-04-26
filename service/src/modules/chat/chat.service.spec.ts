@@ -294,6 +294,7 @@ describe('ChatService history building', () => {
       128,
       'pwd',
       expect.stringContaining('chat-'),
+      undefined,
     );
   });
 });

@@ -6,6 +6,7 @@ import {
   resolveCodeLanguage,
   resolveIdeTabTitle,
   toTerminalLines,
+  unwrapRuntimeCommandPayload,
 } from './ideWorkspace'
 import type { ArtifactWorkspaceTreeItem } from './types'
 
@@ -96,4 +97,33 @@ test('toTerminalLines formats tool executions as terminal lines', () => {
   ])
 
   assert.deepEqual(lines, ['$ shell executing pnpm test', '$ read completed README.md'])
+})
+
+test('unwrapRuntimeCommandPayload ignores the API envelope code and unwraps command result', () => {
+  const payload = {
+    code: 200,
+    data: {
+      data: {
+        code: 0,
+        command: 'cd',
+        containerName: 'openwork-user-1-group-10',
+        cwd: '/workspace/conversations/10',
+        mode: 'docker',
+        stderr: '',
+        stdout: '',
+      },
+      success: true,
+    },
+    success: true,
+  }
+
+  assert.deepEqual(unwrapRuntimeCommandPayload(payload), {
+    code: 0,
+    command: 'cd',
+    containerName: 'openwork-user-1-group-10',
+    cwd: '/workspace/conversations/10',
+    mode: 'docker',
+    stderr: '',
+    stdout: '',
+  })
 })

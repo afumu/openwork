@@ -3,8 +3,8 @@ import { executeRuntimeCommandAPI } from '@/api/runtime'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { toTerminalLines } from './ideWorkspace'
-import type { ToolExecutionLike } from './ideWorkspace'
+import { toTerminalLines, unwrapRuntimeCommandPayload } from './ideWorkspace'
+import type { RuntimeCommandResult, ToolExecutionLike } from './ideWorkspace'
 
 interface ToolExecutionRecord extends ToolExecutionLike {
   event?: string
@@ -191,8 +191,12 @@ async function submitCommand() {
   )
 
   try {
-    const res: any = await executeRuntimeCommandAPI({ groupId: props.groupId, command })
-    const result = unwrapCommandResult(res)
+    const res: any = await executeRuntimeCommandAPI({
+      cwd: currentCwd.value || undefined,
+      groupId: props.groupId,
+      command,
+    })
+    const result = unwrapRuntimeCommandPayload(res)
     if (!result) throw new Error('终端命令返回格式不正确')
 
     currentContainerName.value = result.containerName || currentContainerName.value
@@ -212,13 +216,6 @@ async function submitCommand() {
   }
 }
 
-function unwrapCommandResult(payload: any): any | null {
-  if (!payload || typeof payload !== 'object') return null
-  if ('stdout' in payload || 'stderr' in payload || 'code' in payload) return payload
-  if ('data' in payload) return unwrapCommandResult(payload.data)
-  return null
-}
-
 function writeCommandOutput(value?: string, isError = false) {
   if (!value) return
   value
@@ -230,7 +227,7 @@ function writeCommandOutput(value?: string, isError = false) {
     })
 }
 
-function formatCommandResultLines(result: any) {
+function formatCommandResultLines(result: RuntimeCommandResult) {
   const lines: string[] = []
   if (result.stdout) lines.push(...result.stdout.replace(/\r\n/g, '\n').split('\n').filter(Boolean))
   if (result.stderr) {

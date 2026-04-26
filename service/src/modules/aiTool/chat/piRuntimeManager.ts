@@ -9,6 +9,7 @@ import { promisify } from 'util';
 
 const execFileAsync = promisify(execFile);
 const PI_RUNTIME_CONTAINER_PORT = 8787;
+const RUNTIME_CWD_MARKER = '__OPENWORK_RUNTIME_CWD__:';
 
 type DockerInspectPortBinding = {
   HostIp?: string;
@@ -137,6 +138,25 @@ export function resolveRuntimeWorkspacePath(workspaceRoot: string, workspaceDir:
   const normalizedRoot = workspaceRoot.replace(/\/+$/, '');
   const normalizedDir = workspaceDir.replace(/^\/+/, '');
   return `${normalizedRoot}/${normalizedDir}`;
+}
+
+export function unwrapRuntimeCommandStdout(stdout: string, fallbackCwd: string) {
+  const markerIndex = stdout.lastIndexOf(`\n${RUNTIME_CWD_MARKER}`);
+  const startsWithMarker = stdout.startsWith(RUNTIME_CWD_MARKER);
+
+  if (markerIndex === -1 && !startsWithMarker) {
+    return { cwd: fallbackCwd, stdout };
+  }
+
+  const markerStart = startsWithMarker ? 0 : markerIndex + 1;
+  const output = stdout.slice(0, startsWithMarker ? 0 : markerIndex);
+  const markerLine = stdout.slice(markerStart).split(/\r?\n/)[0] || '';
+  const nextCwd = markerLine.slice(RUNTIME_CWD_MARKER.length).trim();
+
+  return {
+    cwd: nextCwd || fallbackCwd,
+    stdout: output,
+  };
 }
 
 export function resolveRuntimeBundleHostPath(
@@ -343,9 +363,11 @@ export class PiRuntimeManagerService {
     workspaceDir: string,
     command: string,
     traceId?: string,
+    requestedCwd?: string,
   ): Promise<RuntimeCommandResult> {
     const runtime = await this.ensureRuntime(scope, traceId);
-    const cwd = resolveRuntimeWorkspacePath(this.workspaceVolumePath, workspaceDir);
+    const workspaceCwd = resolveRuntimeWorkspacePath(this.workspaceVolumePath, workspaceDir);
+    const cwd = requestedCwd?.trim() || workspaceCwd;
 
     if (runtime.mode !== 'docker') {
       throw new Error('当前运行时不是容器模式，无法连接容器终端');
@@ -355,16 +377,29 @@ export class PiRuntimeManagerService {
       throw new Error('PI runtime 容器不可用');
     }
 
-    return this.executeDockerCommand(runtime.containerName, cwd, command, traceId);
+    return this.executeDockerCommand(runtime.containerName, cwd, workspaceCwd, command, traceId);
   }
 
   private async executeDockerCommand(
     containerName: string,
     cwd: string,
+    workspaceCwd: string,
     command: string,
     traceId?: string,
   ): Promise<RuntimeCommandResult> {
-    const wrappedCommand = `mkdir -p ${shellQuote(cwd)} && cd ${shellQuote(cwd)} && ${command}`;
+    const wrappedCommand = [
+      `mkdir -p ${shellQuote(cwd)} && cd ${shellQuote(cwd)}`,
+      `ll() { ls -la "$@"; }`,
+      `la() { ls -A "$@"; }`,
+      `l() { ls -CF "$@"; }`,
+      `cd() { if [ "$#" -eq 0 ]; then command cd ${shellQuote(
+        workspaceCwd,
+      )}; else command cd "$@"; fi; }`,
+      command,
+      `__openwork_exit_code=$?`,
+      `printf '\\n${RUNTIME_CWD_MARKER}%s\\n' "$PWD"`,
+      `exit $__openwork_exit_code`,
+    ].join('\n');
 
     try {
       const result = await this.runDocker(
@@ -373,24 +408,26 @@ export class PiRuntimeManagerService {
         false,
         30000,
       );
+      const output = unwrapRuntimeCommandStdout(result.stdout || '', cwd);
       return {
         code: 0,
         command,
         containerName,
-        cwd,
+        cwd: output.cwd,
         mode: 'docker',
         stderr: result.stderr || '',
-        stdout: result.stdout || '',
+        stdout: output.stdout,
       };
     } catch (error: any) {
+      const output = unwrapRuntimeCommandStdout(error?.stdout || '', cwd);
       return {
         code: typeof error?.code === 'number' ? error.code : 1,
         command,
         containerName,
-        cwd,
+        cwd: output.cwd,
         mode: 'docker',
         stderr: error?.stderr || error?.message || '',
-        stdout: error?.stdout || '',
+        stdout: output.stdout,
         timedOut: Boolean(error?.killed),
       };
     }
