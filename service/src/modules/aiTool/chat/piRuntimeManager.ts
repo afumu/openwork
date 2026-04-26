@@ -55,6 +55,15 @@ export type PiRuntimeScope = {
   userId: number;
 };
 
+export type RuntimeCommandResult = {
+  code: number;
+  command: string;
+  cwd: string;
+  stderr: string;
+  stdout: string;
+  timedOut?: boolean;
+};
+
 function normalizeRuntimeGroupId(groupId: number | string) {
   if (typeof groupId === 'number') {
     if (!Number.isInteger(groupId) || groupId <= 0) {
@@ -73,6 +82,10 @@ function normalizeRuntimeGroupId(groupId: number | string) {
   }
 
   return normalized;
+}
+
+function shellQuote(s: string) {
+  return `'${s.replace(/'/g, "'\\''")}'`;
 }
 
 export function buildPiRuntimeNames(scope: PiRuntimeScope) {
@@ -116,6 +129,12 @@ export function resolveConversationWorkspace(groupId: number) {
   }
 
   return `conversations/${groupId}`;
+}
+
+export function resolveRuntimeWorkspacePath(workspaceRoot: string, workspaceDir: string) {
+  const normalizedRoot = workspaceRoot.replace(/\/+$/, '');
+  const normalizedDir = workspaceDir.replace(/^\/+/, '');
+  return `${normalizedRoot}/${normalizedDir}`;
 }
 
 export function resolveRuntimeBundleHostPath(
@@ -208,11 +227,14 @@ export class PiRuntimeManagerService {
       return pendingEnsure;
     }
 
-    const ensurePromise = this.ensureDockerRuntime(scope, containerName, volumeName, traceId).finally(
-      () => {
-        this.pendingRuntimeEnsures.delete(containerName);
-      },
-    );
+    const ensurePromise = this.ensureDockerRuntime(
+      scope,
+      containerName,
+      volumeName,
+      traceId,
+    ).finally(() => {
+      this.pendingRuntimeEnsures.delete(containerName);
+    });
     this.pendingRuntimeEnsures.set(containerName, ensurePromise);
     return ensurePromise;
   }
@@ -312,6 +334,95 @@ export class PiRuntimeManagerService {
       userId: scope.userId,
       volumeName,
     };
+  }
+
+  async executeCommand(
+    scope: PiRuntimeScope,
+    workspaceDir: string,
+    command: string,
+    traceId?: string,
+  ): Promise<RuntimeCommandResult> {
+    const runtime = await this.ensureRuntime(scope, traceId);
+    const cwd = resolveRuntimeWorkspacePath(this.workspaceVolumePath, workspaceDir);
+
+    if (runtime.mode === 'docker') {
+      if (!runtime.containerName) {
+        throw new Error('PI runtime 容器不可用');
+      }
+
+      return this.executeDockerCommand(runtime.containerName, cwd, command, traceId);
+    }
+
+    return this.executeDirectCommand(workspaceDir, command);
+  }
+
+  private async executeDockerCommand(
+    containerName: string,
+    cwd: string,
+    command: string,
+    traceId?: string,
+  ): Promise<RuntimeCommandResult> {
+    const wrappedCommand = `mkdir -p ${shellQuote(cwd)} && cd ${shellQuote(cwd)} && ${command}`;
+
+    try {
+      const result = await this.runDocker(
+        ['exec', containerName, 'sh', '-lc', wrappedCommand],
+        traceId,
+        false,
+        30000,
+      );
+      return {
+        code: 0,
+        command,
+        cwd,
+        stderr: result.stderr || '',
+        stdout: result.stdout || '',
+      };
+    } catch (error: any) {
+      return {
+        code: typeof error?.code === 'number' ? error.code : 1,
+        command,
+        cwd,
+        stderr: error?.stderr || error?.message || '',
+        stdout: error?.stdout || '',
+        timedOut: Boolean(error?.killed),
+      };
+    }
+  }
+
+  private async executeDirectCommand(
+    workspaceDir: string,
+    command: string,
+  ): Promise<RuntimeCommandResult> {
+    const workspaceRoot =
+      process.env.PI_RUNTIME_WORKSPACE_ROOT || process.env.PI_OPENAI_CWD || process.cwd();
+    const cwd = resolvePath(workspaceRoot, workspaceDir);
+    await fs.mkdir(cwd, { recursive: true });
+
+    try {
+      const result = await execFileAsync('sh', ['-lc', command], {
+        cwd,
+        env: process.env,
+        maxBuffer: 1024 * 1024 * 4,
+        timeout: 30000,
+      });
+      return {
+        code: 0,
+        command,
+        cwd,
+        stderr: result.stderr || '',
+        stdout: result.stdout || '',
+      };
+    } catch (error: any) {
+      return {
+        code: typeof error?.code === 'number' ? error.code : 1,
+        command,
+        cwd,
+        stderr: error?.stderr || error?.message || '',
+        stdout: error?.stdout || '',
+        timedOut: Boolean(error?.killed),
+      };
+    }
   }
 
   private async createRuntime(scope: PiRuntimeScope, traceId?: string) {
@@ -523,11 +634,12 @@ export class PiRuntimeManagerService {
     }
   }
 
-  private async runDocker(args: string[], traceId?: string, logErrors = true) {
+  private async runDocker(args: string[], traceId?: string, logErrors = true, timeout?: number) {
     try {
       return await execFileAsync(this.dockerBinary, args, {
         env: process.env,
         maxBuffer: 1024 * 1024 * 8,
+        timeout,
       });
     } catch (error) {
       if (logErrors) {

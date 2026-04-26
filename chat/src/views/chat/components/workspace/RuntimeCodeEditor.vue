@@ -7,7 +7,6 @@ import { markdown } from '@codemirror/lang-markdown'
 import { python } from '@codemirror/lang-python'
 import { rust } from '@codemirror/lang-rust'
 import { sql } from '@codemirror/lang-sql'
-import { oneDark } from '@codemirror/theme-one-dark'
 import { EditorView, basicSetup } from 'codemirror'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { resolveCodeLanguage } from './ideWorkspace'
@@ -59,13 +58,25 @@ function mountEditor() {
     extensions: [
       basicSetup,
       languageExtension(),
-      oneDark,
       EditorView.editable.of(!props.readonly),
       EditorView.lineWrapping,
       EditorView.theme({
         '&': {
+          backgroundColor: '#ffffff',
+          color: '#27272a',
           height: '100%',
           fontSize: '13px',
+        },
+        '.cm-content': {
+          caretColor: '#2563eb',
+        },
+        '.cm-gutters': {
+          backgroundColor: '#f8fafc',
+          borderRight: '1px solid #e4e4e7',
+          color: '#71717a',
+        },
+        '.cm-activeLine, .cm-activeLineGutter': {
+          backgroundColor: '#f4f4f5',
         },
         '.cm-scroller': {
           fontFamily: 'JetBrains Mono, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
@@ -90,18 +101,18 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="flex h-full min-h-0 flex-col bg-[#141414]">
+  <section class="flex h-full min-h-0 flex-col bg-white">
     <div
       v-if="!file"
-      class="flex h-full items-center justify-center px-8 text-center text-sm text-zinc-400"
+      class="flex h-full items-center justify-center px-8 text-center text-sm text-zinc-500"
     >
       <div>
         <div
-          class="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/8 text-xl text-zinc-100"
+          class="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-100 text-xl text-zinc-700"
         >
           &lt;/&gt;
         </div>
-        <div class="text-lg font-semibold text-zinc-100">代码编辑器</div>
+        <div class="text-lg font-semibold text-zinc-900">代码编辑器</div>
         <div class="mt-2 text-zinc-500">请在左侧文件导航中打开任意文件</div>
       </div>
     </div>

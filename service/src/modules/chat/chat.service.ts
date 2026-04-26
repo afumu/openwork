@@ -400,6 +400,30 @@ export class ChatService {
     };
   }
 
+  async runtimeExec(body: { groupId?: number; command?: string }, req?: Request) {
+    const traceId = this.createTraceId(req?.user?.id, body?.groupId);
+    const groupId = Number(body?.groupId || 0);
+    const command = String(body?.command || '').trim();
+
+    if (!groupId) {
+      throw new HttpException('缺少 groupId', HttpStatus.BAD_REQUEST);
+    }
+
+    if (!command) {
+      throw new HttpException('缺少可执行的终端命令', HttpStatus.BAD_REQUEST);
+    }
+
+    return {
+      data: await this.openAIChatService.executeRuntimeCommand(
+        req.user.id,
+        groupId,
+        command,
+        traceId,
+      ),
+      success: true,
+    };
+  }
+
   async chatProcess(body: any, req?: Request, res?: Response) {
     await this.userBalanceService.checkUserCertification(req.user.id);
     /* 获取对话参数 */

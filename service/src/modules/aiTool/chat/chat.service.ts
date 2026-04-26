@@ -415,6 +415,16 @@ export class OpenAIChatService {
     return runtime;
   }
 
+  async executeRuntimeCommand(userId: number, groupId: number, command: string, traceId?: string) {
+    const workspaceDir = resolveConversationWorkspace(groupId);
+    return this.piRuntimeManagerService.executeCommand(
+      { groupId, userId },
+      workspaceDir,
+      command,
+      traceId,
+    );
+  }
+
   async readArtifact(
     userId: number,
     groupId: number,

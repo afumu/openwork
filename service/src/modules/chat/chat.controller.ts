@@ -9,6 +9,7 @@ import { DiscussionTurnDto } from './dto/discussionTurn.dto';
 import { DiscoverExpertsDto } from './dto/discoverExperts.dto';
 import { ListArtifactsDto } from './dto/listArtifacts.dto';
 import { ReadArtifactDto } from './dto/readArtifact.dto';
+import { RuntimeExecDto } from './dto/runtimeExec.dto';
 import { RuntimeStatusDto } from './dto/runtimeStatus.dto';
 import { StopChatDto } from './dto/stopChat.dto';
 import { ExpertDiscoveryService } from './expertDiscovery.service';
@@ -61,6 +62,14 @@ export class ChatController {
   @ApiBearerAuth()
   runtimeStatus(@Body() body: RuntimeStatusDto, @Req() req: Request) {
     return this.chatService.runtimeStatus(body, req);
+  }
+
+  @Post('runtime/exec')
+  @ApiOperation({ summary: '在当前对话运行时工作区执行终端命令' })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  runtimeExec(@Body() body: RuntimeExecDto, @Req() req: Request) {
+    return this.chatService.runtimeExec(body, req);
   }
 
   @Post('discover-experts')

@@ -256,4 +256,44 @@ describe('ChatService history building', () => {
       expect.stringContaining('chat-'),
     );
   });
+
+  it('runtimeExec requires a command', async () => {
+    const service = createChatService();
+
+    await expect(
+      (service as any).runtimeExec({ groupId: 128, command: '' }, { user: { id: 42 } } as any),
+    ).rejects.toMatchObject({
+      message: '缺少可执行的终端命令',
+    });
+  });
+
+  it('runtimeExec calls the runtime layer with the current user and group workspace', async () => {
+    const openAIChatService = {
+      executeRuntimeCommand: jest.fn().mockResolvedValue({
+        code: 0,
+        command: 'pwd',
+        stderr: '',
+        stdout: '/workspace/conversations/128\n',
+      }),
+    };
+    const service = createChatService(openAIChatService);
+
+    await expect(
+      (service as any).runtimeExec({ groupId: 128, command: 'pwd' }, { user: { id: 42 } } as any),
+    ).resolves.toEqual({
+      data: {
+        code: 0,
+        command: 'pwd',
+        stderr: '',
+        stdout: '/workspace/conversations/128\n',
+      },
+      success: true,
+    });
+    expect(openAIChatService.executeRuntimeCommand).toHaveBeenCalledWith(
+      42,
+      128,
+      'pwd',
+      expect.stringContaining('chat-'),
+    );
+  });
 });

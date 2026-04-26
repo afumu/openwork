@@ -259,7 +259,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <aside class="runtime-ide-workspace flex h-full min-h-0 border-l border-[#2b2b2b] bg-[#111]">
+  <aside class="runtime-ide-workspace flex h-full min-h-0 border-l border-zinc-200 bg-white">
     <Splitpanes class="runtime-ide-split h-full w-full">
       <Pane min-size="17" size="24" max-size="34">
         <RuntimeFileExplorer
@@ -273,9 +273,9 @@ onBeforeUnmount(() => {
       </Pane>
 
       <Pane min-size="52" size="76">
-        <section class="flex h-full min-h-0 flex-col bg-[#111] text-zinc-100">
+        <section class="flex h-full min-h-0 flex-col bg-white text-zinc-900">
           <header
-            class="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-[#272727] bg-[#111] px-3"
+            class="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-zinc-200 bg-zinc-50 px-3"
           >
             <div class="flex min-w-0 items-center gap-2">
               <button
@@ -317,7 +317,7 @@ onBeforeUnmount(() => {
 
           <div
             v-if="loadError"
-            class="border-b border-rose-500/20 bg-rose-500/10 px-4 py-2 text-xs text-rose-200"
+            class="border-b border-rose-200 bg-rose-50 px-4 py-2 text-xs text-rose-700"
           >
             {{ loadError }}
           </div>
@@ -327,7 +327,7 @@ onBeforeUnmount(() => {
               <div class="relative h-full min-h-0 overflow-hidden">
                 <div
                   v-if="readingFile"
-                  class="absolute right-4 top-4 z-10 rounded-md border border-white/10 bg-black/70 px-3 py-1 text-xs text-zinc-300 shadow-lg"
+                  class="absolute right-4 top-4 z-10 rounded-md border border-zinc-200 bg-white/90 px-3 py-1 text-xs text-zinc-600 shadow-lg"
                 >
                   正在读取文件...
                 </div>
@@ -347,7 +347,12 @@ onBeforeUnmount(() => {
             </Pane>
 
             <Pane min-size="18" size="28" max-size="44">
-              <RuntimeTerminalPane class="h-full" :chats="chats" :is-streaming="isStreaming" />
+              <RuntimeTerminalPane
+                class="h-full"
+                :chats="chats"
+                :group-id="groupId"
+                :is-streaming="isStreaming"
+              />
             </Pane>
           </Splitpanes>
         </section>
@@ -358,7 +363,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .runtime-ide-workspace {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 .main-tab,
@@ -370,7 +375,7 @@ onBeforeUnmount(() => {
   gap: 6px;
   border-radius: 10px;
   padding: 0 16px;
-  color: #d4d4d8;
+  color: #52525b;
   font-size: 14px;
   font-weight: 600;
   white-space: nowrap;
@@ -379,17 +384,17 @@ onBeforeUnmount(() => {
 .main-tab:hover,
 .new-tab:hover,
 .toolbar-icon:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: white;
+  background: #f4f4f5;
+  color: #18181b;
 }
 
 .main-tab-active {
-  background: #3e3b37;
-  color: #fafafa;
+  background: #e4e4e7;
+  color: #18181b;
 }
 
 .new-tab {
-  color: #e4e4e7;
+  color: #3f3f46;
 }
 
 .runtime-pill {
@@ -397,16 +402,16 @@ onBeforeUnmount(() => {
   height: 24px;
   align-items: center;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: #f4f4f5;
   padding: 0 9px;
-  color: #a1a1aa;
+  color: #52525b;
   font-size: 12px;
   white-space: nowrap;
 }
 
 .runtime-pill-active {
   background: rgba(34, 197, 94, 0.14);
-  color: #86efac;
+  color: #15803d;
 }
 
 .toolbar-icon {
@@ -415,8 +420,8 @@ onBeforeUnmount(() => {
   width: 32px;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  color: #e4e4e7;
+  border: 1px solid #d4d4d8;
+  color: #3f3f46;
   font-size: 16px;
 }
 
@@ -452,14 +457,14 @@ onBeforeUnmount(() => {
 
 .runtime-ide-split :deep(.splitpanes__splitter) {
   min-width: 1px;
-  border-left: 1px solid #242424;
-  background: #111;
+  border-left: 1px solid #e4e4e7;
+  background: #fafafa;
 }
 
 .runtime-ide-main :deep(.splitpanes__splitter) {
   min-height: 1px;
-  border-top: 1px solid #242424;
-  background: #111;
+  border-top: 1px solid #e4e4e7;
+  background: #fafafa;
 }
 
 .runtime-ide-split :deep(.splitpanes__splitter:hover),

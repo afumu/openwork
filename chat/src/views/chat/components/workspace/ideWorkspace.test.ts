@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   buildIdeTreeNodes,
+  resolveIdeTreeNodePayload,
   resolveCodeLanguage,
   resolveIdeTabTitle,
   toTerminalLines,
@@ -65,6 +66,19 @@ test('resolveCodeLanguage maps common runtime files to CodeMirror languages', ()
 test('resolveIdeTabTitle falls back to empty editor title', () => {
   assert.equal(resolveIdeTabTitle(null), '代码编辑器')
   assert.equal(resolveIdeTabTitle({ path: 'src/main.ts' }), 'main.ts')
+})
+
+test('resolveIdeTreeNodePayload reads vue-tree meta model payloads', () => {
+  const payload = {
+    nodeType: 'file' as const,
+    path: 'index.html',
+    runId: null,
+    type: 'text/html',
+  }
+
+  assert.deepEqual(resolveIdeTreeNodePayload({ data: { data: payload } }), payload)
+  assert.deepEqual(resolveIdeTreeNodePayload({ data: payload }), payload)
+  assert.equal(resolveIdeTreeNodePayload({ data: { label: 'index.html' } }), null)
 })
 
 test('toTerminalLines formats tool executions as terminal lines', () => {

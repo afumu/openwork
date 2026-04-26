@@ -2,7 +2,7 @@
 import { TreeView } from '@grapoza/vue-tree'
 import '@grapoza/vue-tree/css'
 import { ref, watch } from 'vue'
-import { buildIdeTreeNodes } from './ideWorkspace'
+import { buildIdeTreeNodes, resolveIdeTreeNodePayload } from './ideWorkspace'
 import type { IdeTreeNode } from './ideWorkspace'
 import type { ArtifactWorkspaceTreeItem } from './types'
 
@@ -48,8 +48,8 @@ function withNodeState(nodes: IdeTreeNode[], selectedPath: string): RuntimeTreeN
 }
 
 function handleSelect(node: any) {
-  const data = node?.data || node
-  if (data?.nodeType !== 'file') return
+  const data = resolveIdeTreeNodePayload(node)
+  if (!data) return
   emit('select-file', {
     path: data.path,
     runId: data.runId,
@@ -58,10 +58,10 @@ function handleSelect(node: any) {
 </script>
 
 <template>
-  <aside class="runtime-file-explorer flex h-full min-h-0 flex-col bg-[#080808] text-zinc-100">
+  <aside class="runtime-file-explorer flex h-full min-h-0 flex-col bg-white text-zinc-900">
     <header class="flex h-12 shrink-0 items-center justify-between px-4">
       <span class="text-sm font-medium">Projects</span>
-      <div class="flex items-center gap-1 text-zinc-400">
+      <div class="flex items-center gap-1 text-zinc-500">
         <button class="ide-icon-btn" type="button" title="刷新" @click="emit('refresh')">↻</button>
         <button class="ide-icon-btn" type="button" title="新文件">＋</button>
       </div>
@@ -90,7 +90,7 @@ function handleSelect(node: any) {
 
 <style scoped>
 .runtime-file-explorer {
-  --tree-row-hover: rgba(255, 255, 255, 0.07);
+  --tree-row-hover: #f4f4f5;
 }
 
 .ide-icon-btn {
@@ -100,14 +100,14 @@ function handleSelect(node: any) {
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  color: #d4d4d8;
+  color: #52525b;
   font-size: 16px;
   line-height: 1;
 }
 
 .ide-icon-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: white;
+  background: #f4f4f5;
+  color: #18181b;
 }
 
 .runtime-file-tree :deep(*) {
@@ -125,7 +125,7 @@ function handleSelect(node: any) {
 }
 
 .runtime-file-tree :deep(.grtvn-self-selected) {
-  background: rgba(255, 255, 255, 0.1);
+  background: #e4e4e7;
 }
 
 .runtime-file-tree :deep(.grtvn-self-label) {

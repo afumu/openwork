@@ -47,7 +47,7 @@ const imageSource = computed(() => {
 
 <template>
   <section
-    class="runtime-preview-pane flex h-full min-h-0 flex-col overflow-hidden bg-[#141414] text-zinc-100"
+    class="runtime-preview-pane flex h-full min-h-0 flex-col overflow-hidden bg-white text-zinc-900"
   >
     <div
       v-if="!file"
@@ -55,21 +55,21 @@ const imageSource = computed(() => {
     >
       <div>
         <div
-          class="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/8 text-xl text-zinc-100"
+          class="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-100 text-xl text-zinc-700"
         >
           ◫
         </div>
-        <div class="text-lg font-semibold text-zinc-100">预览</div>
+        <div class="text-lg font-semibold text-zinc-900">预览</div>
         <div class="mt-2 text-zinc-500">请在左侧文件导航中打开任意文件</div>
       </div>
     </div>
 
     <template v-else>
       <header
-        class="flex min-h-[46px] items-center justify-between gap-3 border-b border-[#272727] px-4"
+        class="flex min-h-[46px] items-center justify-between gap-3 border-b border-zinc-200 px-4"
       >
         <div class="min-w-0">
-          <div class="truncate text-sm font-semibold text-zinc-100">
+          <div class="truncate text-sm font-semibold text-zinc-900">
             {{ file.path.split('/').pop() || file.path }}
           </div>
           <div class="truncate text-xs text-zinc-500">{{ file.path }}</div>
@@ -82,11 +82,11 @@ const imageSource = computed(() => {
         </span>
       </header>
 
-      <main class="custom-scrollbar min-h-0 flex-1 overflow-auto bg-[#141414]">
+      <main class="custom-scrollbar min-h-0 flex-1 overflow-auto bg-white">
         <MdPreview
           v-if="previewKind === 'markdown'"
           editor-id="runtime-workspace-markdown-preview"
-          class="runtime-markdown-preview min-h-full bg-[#141414] px-7 py-6"
+          class="runtime-markdown-preview min-h-full bg-white px-7 py-6"
           :model-value="file.content"
           :theme="markdownPreviewTheme"
           preview-theme="github"
@@ -112,7 +112,7 @@ const imageSource = computed(() => {
 
         <pre
           v-else
-          class="min-h-full whitespace-pre-wrap break-words p-5 text-xs leading-6 text-zinc-100"
+          class="min-h-full whitespace-pre-wrap break-words p-5 text-xs leading-6 text-zinc-800"
         ><code>{{ formattedContent }}</code></pre>
       </main>
     </template>

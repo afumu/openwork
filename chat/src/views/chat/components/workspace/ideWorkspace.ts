@@ -12,6 +12,8 @@ export interface IdeTreeNode {
   label: string
 }
 
+export type IdeTreeNodePayload = IdeTreeNode['data']
+
 export interface IdeTabFile {
   path: string
 }
@@ -90,6 +92,13 @@ export function resolveCodeLanguage(path: string, mimeType = ''): CodeLanguage {
 export function resolveIdeTabTitle(file: IdeTabFile | null) {
   if (!file?.path) return '代码编辑器'
   return file.path.split('/').pop() || file.path
+}
+
+export function resolveIdeTreeNodePayload(node: any): IdeTreeNodePayload | null {
+  const payload = node?.data?.data || node?.data || node
+  if (!payload || payload.nodeType !== 'file') return null
+  if (typeof payload.path !== 'string' || !payload.path) return null
+  return payload
 }
 
 export function toTerminalLines(records: ToolExecutionLike[]) {

@@ -6,6 +6,7 @@ import {
   resolveRuntimeBundleHostPath,
   resolveConversationWorkspace,
   resolveRuntimeBootstrapAgentFiles,
+  resolveRuntimeWorkspacePath,
 } from './piRuntimeManager';
 
 declare const describe: any;
@@ -43,6 +44,12 @@ describe('piRuntimeManager helpers', () => {
 
   test('resolveConversationWorkspace rejects invalid group ids', () => {
     expect(() => resolveConversationWorkspace(0)).toThrow('非法的对话分组 ID');
+  });
+
+  test('resolveRuntimeWorkspacePath joins runtime root and conversation workspace', () => {
+    expect(resolveRuntimeWorkspacePath('/workspace/', '/conversations/128')).toBe(
+      '/workspace/conversations/128',
+    );
   });
 
   test('resolveRuntimeBundleHostPath falls back to user home on darwin', () => {
