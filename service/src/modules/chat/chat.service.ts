@@ -386,6 +386,20 @@ export class ChatService {
     }
   }
 
+  async runtimeStatus(body: { groupId?: number }, req?: Request) {
+    const traceId = this.createTraceId(req?.user?.id, body?.groupId);
+    const groupId = Number(body?.groupId || 0);
+
+    if (!groupId) {
+      throw new HttpException('缺少 groupId', HttpStatus.BAD_REQUEST);
+    }
+
+    return {
+      data: await this.openAIChatService.getRuntimeStatus(req.user.id, groupId, traceId),
+      success: true,
+    };
+  }
+
   async chatProcess(body: any, req?: Request, res?: Response) {
     await this.userBalanceService.checkUserCertification(req.user.id);
     /* 获取对话参数 */
@@ -1381,8 +1395,8 @@ export class ChatService {
                   ? '回复出错，Agent 内部模型调用已按实际用量结算'
                   : '回复因长度截断，Agent 内部模型调用已按实际用量结算'
                 : response.errMsg
-                  ? '回复出错，本次不扣除积分'
-                  : '回复因长度截断，请点击“继续”接着操作',
+                ? '回复出错，本次不扣除积分'
+                : '回复因长度截断，请点击“继续”接着操作',
               {
                 assistantLogId,
                 agentBilling: response.agentBilling || null,

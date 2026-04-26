@@ -396,6 +396,25 @@ export class OpenAIChatService {
     return data;
   }
 
+  async getRuntimeStatus(userId: number, groupId: number, traceId?: string) {
+    const runtime = await this.piRuntimeManagerService.findRuntime(
+      { groupId, userId },
+      false,
+      traceId,
+    );
+
+    if (!runtime) {
+      return {
+        groupId,
+        mode: this.piRuntimeManagerService.isDockerEnabled() ? 'docker' : 'direct',
+        running: false,
+        userId,
+      };
+    }
+
+    return runtime;
+  }
+
   async readArtifact(
     userId: number,
     groupId: number,

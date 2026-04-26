@@ -9,6 +9,7 @@ import { DiscussionTurnDto } from './dto/discussionTurn.dto';
 import { DiscoverExpertsDto } from './dto/discoverExperts.dto';
 import { ListArtifactsDto } from './dto/listArtifacts.dto';
 import { ReadArtifactDto } from './dto/readArtifact.dto';
+import { RuntimeStatusDto } from './dto/runtimeStatus.dto';
 import { StopChatDto } from './dto/stopChat.dto';
 import { ExpertDiscoveryService } from './expertDiscovery.service';
 import { GroupDiscussionService } from './groupDiscussion.service';
@@ -52,6 +53,14 @@ export class ChatController {
   @ApiBearerAuth()
   readArtifact(@Body() body: ReadArtifactDto, @Req() req: Request) {
     return this.chatService.readArtifact(body, req);
+  }
+
+  @Post('runtime/status')
+  @ApiOperation({ summary: '查询当前对话运行时容器状态' })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  runtimeStatus(@Body() body: RuntimeStatusDto, @Req() req: Request) {
+    return this.chatService.runtimeStatus(body, req);
   }
 
   @Post('discover-experts')

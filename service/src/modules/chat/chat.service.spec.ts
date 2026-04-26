@@ -5,11 +5,11 @@ declare const expect: any;
 declare const it: any;
 declare const jest: any;
 
-function createChatService() {
+function createChatService(openAIChatService: any = { chatFree: jest.fn() }) {
   return new ChatService(
     {} as any,
     {} as any,
-    { chatFree: jest.fn() } as any,
+    openAIChatService,
     {} as any,
     {} as any,
     {} as any,
@@ -216,5 +216,44 @@ describe('ChatService history building', () => {
         content: '继续。',
       },
     ]);
+  });
+
+  it('runtimeStatus requires a groupId', async () => {
+    const service = createChatService();
+
+    await expect(
+      (service as any).runtimeStatus({}, { user: { id: 42 } } as any),
+    ).rejects.toMatchObject({
+      message: '缺少 groupId',
+    });
+  });
+
+  it('runtimeStatus calls the runtime layer with the current user', async () => {
+    const openAIChatService = {
+      getRuntimeStatus: jest.fn().mockResolvedValue({
+        groupId: 128,
+        mode: 'docker',
+        running: true,
+        userId: 42,
+      }),
+    };
+    const service = createChatService(openAIChatService);
+
+    await expect(
+      (service as any).runtimeStatus({ groupId: 128 }, { user: { id: 42 } } as any),
+    ).resolves.toEqual({
+      data: {
+        groupId: 128,
+        mode: 'docker',
+        running: true,
+        userId: 42,
+      },
+      success: true,
+    });
+    expect(openAIChatService.getRuntimeStatus).toHaveBeenCalledWith(
+      42,
+      128,
+      expect.stringContaining('chat-'),
+    );
   });
 });

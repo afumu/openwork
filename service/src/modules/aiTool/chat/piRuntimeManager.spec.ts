@@ -22,9 +22,7 @@ describe('piRuntimeManager helpers', () => {
   });
 
   test('buildPiRuntimeNames requires a valid conversation group id', () => {
-    expect(() => buildPiRuntimeNames({ groupId: 0, userId: 42 })).toThrow(
-      '非法的对话分组 ID',
-    );
+    expect(() => buildPiRuntimeNames({ groupId: 0, userId: 42 })).toThrow('非法的对话分组 ID');
   });
 
   test('extractPublishedPort reads the published 8787/tcp mapping', () => {
@@ -144,6 +142,35 @@ describe('piRuntimeManager helpers', () => {
     await expect(second).resolves.toMatchObject({
       containerName: 'openwork-user-1-group-9',
       hostPort: 49153,
+    });
+  });
+
+  test('findRuntime returns the conversation container descriptor without starting missing containers', async () => {
+    const service = new PiRuntimeManagerService({} as any) as any;
+    service.dockerEnabled = true;
+    service.dockerHost = '127.0.0.1';
+    service.inspectContainer = jest.fn().mockResolvedValue({
+      Id: 'container-1',
+      NetworkSettings: {
+        Ports: {
+          '8787/tcp': [{ HostIp: '127.0.0.1', HostPort: '49153' }],
+        },
+      },
+      State: {
+        Running: true,
+        Status: 'running',
+      },
+    });
+
+    await expect(
+      service.findRuntime({ groupId: 128, userId: 42 }, false, 'trace-1'),
+    ).resolves.toMatchObject({
+      containerName: 'openwork-user-42-group-128',
+      groupId: 128,
+      hostPort: 49153,
+      mode: 'docker',
+      running: true,
+      userId: 42,
     });
   });
 });
