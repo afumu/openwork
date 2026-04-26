@@ -104,9 +104,7 @@ function sortFiles(left: ArtifactWorkspaceFileItem, right: ArtifactWorkspaceFile
   return left.path.localeCompare(right.path)
 }
 
-export function sortWorkspaceTree(
-  nodes: ArtifactWorkspaceTreeItem[]
-): ArtifactWorkspaceTreeItem[] {
+export function sortWorkspaceTree(nodes: ArtifactWorkspaceTreeItem[]): ArtifactWorkspaceTreeItem[] {
   return nodes
     .slice()
     .sort((left, right) => {

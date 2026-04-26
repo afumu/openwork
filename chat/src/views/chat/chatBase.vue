@@ -30,6 +30,7 @@ import GroupChatBuilderDrawer from './components/group-chat/GroupChatBuilderDraw
 import HeaderComponent from './components/Header/index.vue'
 import Message from './components/Message/index.vue'
 import PresetHints from './components/PresetHints/index.vue'
+import RuntimeWorkspacePanel from './components/workspace/RuntimeWorkspacePanel.vue'
 import WelcomeComponent from './components/Welcome/index.vue'
 
 // ============== Composition API ==============
@@ -246,6 +247,14 @@ const isDarkTheme = computed(() => {
   if (typeof document === 'undefined') return false
   const html = document.documentElement
   return html.classList.contains('dark') || html.dataset.theme === 'dark'
+})
+const shouldShowRuntimeWorkspace = computed(() => {
+  return (
+    !isMobile.value &&
+    Boolean(activeGroupId.value) &&
+    !useGlobalStore.showAppListComponent &&
+    !useGlobalStore.externalLinkDialog
+  )
 })
 
 // 使用watch监听activeGroupInfo的变化
@@ -1550,7 +1559,9 @@ function toggleArtifactsDrawer(visible?: boolean) {
 
 function openArtifactPreview(path?: string) {
   artifactsInitialPath.value = path || ''
-  artifactsDrawerVisible.value = true
+  if (isMobile.value) {
+    artifactsDrawerVisible.value = true
+  }
 }
 
 function unwrapArtifactPayload<T>(payload: any): T | null {
@@ -1631,10 +1642,11 @@ provide('tryParseJson', tryParseJson)
 
 <template>
   <Sider class="h-full" />
-  <div class="relative flex h-full w-full">
+  <div class="relative flex h-full w-full overflow-hidden">
     <!-- Main container flex -->
     <div
-      class="relative overflow-hidden h-full w-full flex flex-col transition-all duration-300 ease-in-out transform"
+      class="relative h-full flex flex-col overflow-hidden transition-all duration-300 ease-in-out transform"
+      :class="shouldShowRuntimeWorkspace ? 'w-[44%] min-w-[420px] max-w-[720px]' : 'w-full'"
     >
       <!-- Background Image Layer -->
       <div
@@ -1797,7 +1809,7 @@ provide('tryParseJson', tryParseJson)
                   type="button"
                   class="conversation-artifacts-entry"
                   :class="{ 'conversation-artifacts-entry-dark': isDarkTheme }"
-                  @click="toggleArtifactsDrawer(true)"
+                  @click="openArtifactPreview()"
                 >
                   <DocDetail size="17" />
                   <span>查看对话中的所有文件</span>
@@ -1928,7 +1940,18 @@ provide('tryParseJson', tryParseJson)
       </template>
     </div>
 
+    <RuntimeWorkspacePanel
+      v-if="shouldShowRuntimeWorkspace"
+      class="min-w-0 flex-1"
+      :artifact-count="conversationArtifactCount"
+      :chats="dataSources"
+      :group-id="Number(activeGroupId || 0)"
+      :initial-path="artifactsInitialPath"
+      :is-streaming="Boolean(chatStore.isStreamIn)"
+    />
+
     <ArtifactsDrawer
+      v-if="isMobile"
       :visible="artifactsDrawerVisible"
       :group-id="Number(activeGroupId || 0)"
       :is-streaming="Boolean(chatStore.isStreamIn)"
