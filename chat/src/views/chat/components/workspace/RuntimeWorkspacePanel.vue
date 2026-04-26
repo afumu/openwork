@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { fetchArtifactListAPI, fetchArtifactReadAPI } from '@/api/artifacts'
 import { fetchRuntimeStatusAPI } from '@/api/runtime'
+import { copyText } from '@/utils/format'
 import { shouldRefreshSelectedArtifact } from '@/utils/artifactPreview'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { Pane, Splitpanes } from 'splitpanes'
@@ -12,6 +13,11 @@ import {
   unwrapArtifactPayload,
 } from './artifactWorkspace'
 import { resolveIdeTabTitle } from './ideWorkspace'
+import {
+  buildRuntimeInfoSummary,
+  resolveWorkspaceOpenTarget,
+  resolveWorkspaceToolbarCopyText,
+} from './runtimeWorkspaceActions'
 import RuntimeCodeEditor from './RuntimeCodeEditor.vue'
 import RuntimeFileExplorer from './RuntimeFileExplorer.vue'
 import RuntimePreviewPane from './RuntimePreviewPane.vue'
@@ -43,6 +49,9 @@ const selectedFile = ref<ArtifactReadResult | null>(null)
 const runtimeStatus = ref<RuntimeStatusPayload | null>(null)
 const runtimeLoading = ref(false)
 const pollTimer = ref<number | null>(null)
+const showRuntimeInfo = ref(false)
+const toolbarMessage = ref('')
+const toolbarMessageTimer = ref<number | null>(null)
 
 const workspaceFiles = computed(() => flattenArtifactManifestFiles(manifest.value))
 
@@ -73,6 +82,15 @@ const runtimeModeText = computed(() => {
 
 const fileCountText = computed(() => workspaceFiles.value.length || props.artifactCount || 0)
 
+const runtimeInfoSummary = computed(() =>
+  buildRuntimeInfoSummary({
+    fileCount: Number(fileCountText.value),
+    runtimeStatus: runtimeStatus.value,
+    selectedPath: selectedPath.value,
+    workspaceDir: manifest.value?.workspaceDir,
+  })
+)
+
 function normalizeWorkspacePath(path?: string) {
   const trimmedPath = String(path || '')
     .trim()
@@ -93,6 +111,22 @@ function clearPolling() {
     window.clearInterval(pollTimer.value)
     pollTimer.value = null
   }
+}
+
+function clearToolbarMessageTimer() {
+  if (toolbarMessageTimer.value) {
+    window.clearTimeout(toolbarMessageTimer.value)
+    toolbarMessageTimer.value = null
+  }
+}
+
+function showToolbarMessage(message: string) {
+  clearToolbarMessageTimer()
+  toolbarMessage.value = message
+  toolbarMessageTimer.value = window.setTimeout(() => {
+    toolbarMessage.value = ''
+    toolbarMessageTimer.value = null
+  }, 1800)
 }
 
 function startPolling() {
@@ -216,6 +250,47 @@ function handleOpenSelectedPreview() {
   activeMainTab.value = 'preview'
 }
 
+async function refreshWorkspace() {
+  await Promise.all([loadArtifacts(true), loadRuntimeStatus(true)])
+  showToolbarMessage('工作区已刷新')
+}
+
+function toggleRuntimeInfo() {
+  showRuntimeInfo.value = !showRuntimeInfo.value
+}
+
+function copySelectedFile() {
+  const text = resolveWorkspaceToolbarCopyText(selectedFile.value)
+  if (!text) {
+    showToolbarMessage('请先选择一个文件')
+    return
+  }
+
+  copyText({ text, origin: true })
+  showToolbarMessage('已复制当前文件内容')
+}
+
+function openSelectedFile() {
+  const target = resolveWorkspaceOpenTarget(selectedFile.value)
+  if (!target) {
+    showToolbarMessage('请先选择一个文件')
+    return
+  }
+
+  if (target.kind === 'url') {
+    window.open(target.url, '_blank', 'noopener')
+    return
+  }
+
+  const url = URL.createObjectURL(new Blob([target.content], { type: target.mimeType }))
+  window.open(url, '_blank', 'noopener')
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}
+
+function showDeployPending() {
+  showToolbarMessage('部署能力尚未接入')
+}
+
 watch(
   () => props.groupId,
   groupId => {
@@ -255,6 +330,7 @@ watch(
 
 onBeforeUnmount(() => {
   clearPolling()
+  clearToolbarMessageTimer()
 })
 </script>
 
@@ -294,7 +370,13 @@ onBeforeUnmount(() => {
               >
                 &lt;&gt; 代码
               </button>
-              <button class="new-tab hidden 2xl:inline-flex" type="button">＋ 新标签页</button>
+              <button
+                class="new-tab hidden 2xl:inline-flex"
+                type="button"
+                @click="openSelectedFile"
+              >
+                ＋ 新标签页
+              </button>
               <span class="hidden min-w-0 truncate pl-1 text-xs text-zinc-500 xl:block">
                 {{ selectedFileRecord?.path || selectedTitle }}
               </span>
@@ -307,13 +389,47 @@ onBeforeUnmount(() => {
               <span class="hidden text-xs text-zinc-500 2xl:inline">
                 {{ runtimeModeText }} · 文件 {{ fileCountText }}
               </span>
-              <button class="toolbar-icon" type="button" title="主题">◐</button>
-              <button class="toolbar-icon" type="button" title="设置">☷</button>
-              <button class="toolbar-icon" type="button" title="复制">▣</button>
-              <button class="toolbar-icon" type="button" title="打开">↗</button>
-              <button class="deploy-button" type="button">部署</button>
+              <span v-if="toolbarMessage" class="hidden text-xs text-zinc-500 xl:inline">
+                {{ toolbarMessage }}
+              </span>
+              <button class="toolbar-icon" type="button" title="刷新工作区" @click="refreshWorkspace">
+                ⟳
+              </button>
+              <button
+                class="toolbar-icon"
+                type="button"
+                title="工作区信息"
+                :class="{ 'toolbar-icon-active': showRuntimeInfo }"
+                @click="toggleRuntimeInfo"
+              >
+                ☷
+              </button>
+              <button
+                class="toolbar-icon"
+                type="button"
+                title="复制当前文件内容"
+                @click="copySelectedFile"
+              >
+                ▣
+              </button>
+              <button
+                class="toolbar-icon"
+                type="button"
+                title="在新标签页打开当前文件"
+                @click="openSelectedFile"
+              >
+                ↗
+              </button>
+              <button class="deploy-button" type="button" @click="showDeployPending">部署</button>
             </div>
           </header>
+
+          <div
+            v-if="showRuntimeInfo"
+            class="border-b border-zinc-200 bg-white px-4 py-3 text-xs leading-5 text-zinc-600"
+          >
+            <pre class="whitespace-pre-wrap font-sans">{{ runtimeInfoSummary }}</pre>
+          </div>
 
           <div
             v-if="loadError"
@@ -385,6 +501,11 @@ onBeforeUnmount(() => {
 .new-tab:hover,
 .toolbar-icon:hover {
   background: #f4f4f5;
+  color: #18181b;
+}
+
+.toolbar-icon-active {
+  background: #e4e4e7;
   color: #18181b;
 }
 
