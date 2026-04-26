@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { TreeView } from '@grapoza/vue-tree'
 import '@grapoza/vue-tree/css'
-import { watch, ref } from 'vue'
+import { ref, watch } from 'vue'
 import { buildIdeTreeNodes } from './ideWorkspace'
 import type { IdeTreeNode } from './ideWorkspace'
 import type { ArtifactWorkspaceTreeItem } from './types'
@@ -17,15 +17,35 @@ const emit = defineEmits<{
   (event: 'select-file', payload: { path: string; runId?: string | null }): void
 }>()
 
-const treeModel = ref<IdeTreeNode[]>([])
+type RuntimeTreeNode = IdeTreeNode & {
+  selectable?: boolean
+  state?: {
+    expanded?: boolean
+    selected?: boolean
+  }
+}
+
+const treeModel = ref<RuntimeTreeNode[]>([])
 
 watch(
-  () => props.tree,
-  tree => {
-    treeModel.value = buildIdeTreeNodes(tree)
+  () => [props.tree, props.selectedPath] as const,
+  ([tree, selectedPath]) => {
+    treeModel.value = withNodeState(buildIdeTreeNodes(tree), selectedPath)
   },
   { deep: true, immediate: true }
 )
+
+function withNodeState(nodes: IdeTreeNode[], selectedPath: string): RuntimeTreeNode[] {
+  return nodes.map(node => ({
+    ...node,
+    children: node.children ? withNodeState(node.children, selectedPath) : undefined,
+    selectable: node.data.nodeType === 'file',
+    state: {
+      expanded: node.data.nodeType === 'directory',
+      selected: node.data.nodeType === 'file' && node.data.path === selectedPath,
+    },
+  }))
+}
 
 function handleSelect(node: any) {
   const data = node?.data || node
@@ -59,6 +79,7 @@ function handleSelect(node: any) {
         id="runtime-workspace-file-tree"
         v-model="treeModel"
         class="runtime-file-tree"
+        selection-mode="single"
         @tree-node-click="handleSelect"
       />
     </div>
@@ -101,6 +122,10 @@ function handleSelect(node: any) {
 
 .runtime-file-tree :deep(.grtvn-self:hover) {
   background: var(--tree-row-hover);
+}
+
+.runtime-file-tree :deep(.grtvn-self-selected) {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .runtime-file-tree :deep(.grtvn-self-label) {

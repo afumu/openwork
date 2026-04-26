@@ -49,7 +49,7 @@
     "@codemirror/lang-sql": "^6.8.0",
     "@codemirror/state": "^6.5.2",
     "@codemirror/theme-one-dark": "^6.1.2",
-    "@grapoza/vue-tree": "^7.0.4",
+    "@grapoza/vue-tree": "^6.1.1",
     "@icon-park/vue-next": "^1.4.2",
     "@opendocsg/pdf2md": "^0.2.1",
     "@tailwindcss/typography": "^0.5.16",

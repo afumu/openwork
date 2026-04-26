@@ -48,8 +48,8 @@ importers:
         specifier: ^6.1.2
         version: 6.1.2
       '@grapoza/vue-tree':
-        specifier: ^7.0.4
-        version: 7.0.4(typescript@4.9.5)
+        specifier: ^6.1.1
+        version: 6.1.1(typescript@4.9.5)
       '@icon-park/vue-next':
         specifier: ^1.4.2
         version: 1.4.2(vue@3.5.13(typescript@4.9.5))
@@ -668,9 +668,8 @@ packages:
   '@gera2ld/jsx-dom@2.2.2':
     resolution: {integrity: sha512-EOqf31IATRE6zS1W1EoWmXZhGfLAoO9FIlwTtHduSrBdud4npYBxYAkv8dZ5hudDPwJeeSjn40kbCL4wAzr8dA==}
 
-  '@grapoza/vue-tree@7.0.4':
-    resolution: {integrity: sha512-Ct4A/gmKJsGTCPGNO/SSmyuhvJ0UgVUe85Pf7uxIS/2rKdGcte2psa1sWGxGvH2oBKeZbjtC8DYGIZJwlJ9KpQ==}
-    engines: {node: ^20.12.2}
+  '@grapoza/vue-tree@6.1.1':
+    resolution: {integrity: sha512-xMX/0425RT1jCy4dY1e9X1hNRZNzuD0z3Pio3LIqy2ChV+xBn0MZ6o/0obDExPUdifo0d6olQQsIhthi0eGNug==}
 
   '@icon-park/vue-next@1.4.2':
     resolution: {integrity: sha512-+QklF255wkfBOabY+xw6FAI0Bwln/RhdwCunNy/9sKdKuChtaU67QZqU67KGAvZUTeeBgsL+yaHHxqfQeGZXEQ==}
@@ -4234,7 +4233,7 @@ snapshots:
     dependencies:
       '@babel/runtime': 7.27.1
 
-  '@grapoza/vue-tree@7.0.4(typescript@4.9.5)':
+  '@grapoza/vue-tree@6.1.1(typescript@4.9.5)':
     dependencies:
       vue: 3.5.13(typescript@4.9.5)
     transitivePeerDependencies:

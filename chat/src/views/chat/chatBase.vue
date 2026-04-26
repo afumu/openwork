@@ -1646,7 +1646,7 @@ provide('tryParseJson', tryParseJson)
     <!-- Main container flex -->
     <div
       class="relative h-full flex flex-col overflow-hidden transition-all duration-300 ease-in-out transform"
-      :class="shouldShowRuntimeWorkspace ? 'w-[44%] min-w-[420px] max-w-[720px]' : 'w-full'"
+      :class="shouldShowRuntimeWorkspace ? 'w-[38%] min-w-[380px] max-w-[680px]' : 'w-full'"
     >
       <!-- Background Image Layer -->
       <div
