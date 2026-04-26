@@ -47,6 +47,9 @@ importers:
       '@codemirror/theme-one-dark':
         specifier: ^6.1.2
         version: 6.1.2
+      '@grapoza/vue-tree':
+        specifier: ^7.0.4
+        version: 7.0.4(typescript@4.9.5)
       '@icon-park/vue-next':
         specifier: ^1.4.2
         version: 1.4.2(vue@3.5.13(typescript@4.9.5))
@@ -68,6 +71,9 @@ importers:
       '@vueuse/motion':
         specifier: ^3.0.3
         version: 3.0.3(vue@3.5.13(typescript@4.9.5))
+      '@xterm/xterm':
+        specifier: ^6.0.0
+        version: 6.0.0
       clientjs:
         specifier: ^0.2.1
         version: 0.2.1
@@ -137,6 +143,9 @@ importers:
       qrcode:
         specifier: ^1.5.4
         version: 1.5.4
+      splitpanes:
+        specifier: ^4.0.4
+        version: 4.0.4(vue@3.5.13(typescript@4.9.5))
       tailwind-scrollbar:
         specifier: ^3.1.0
         version: 3.1.0(tailwindcss@3.4.17(ts-node@10.9.2(@types/node@18.19.100)(typescript@4.9.5)))
@@ -658,6 +667,10 @@ packages:
 
   '@gera2ld/jsx-dom@2.2.2':
     resolution: {integrity: sha512-EOqf31IATRE6zS1W1EoWmXZhGfLAoO9FIlwTtHduSrBdud4npYBxYAkv8dZ5hudDPwJeeSjn40kbCL4wAzr8dA==}
+
+  '@grapoza/vue-tree@7.0.4':
+    resolution: {integrity: sha512-Ct4A/gmKJsGTCPGNO/SSmyuhvJ0UgVUe85Pf7uxIS/2rKdGcte2psa1sWGxGvH2oBKeZbjtC8DYGIZJwlJ9KpQ==}
+    engines: {node: ^20.12.2}
 
   '@icon-park/vue-next@1.4.2':
     resolution: {integrity: sha512-+QklF255wkfBOabY+xw6FAI0Bwln/RhdwCunNy/9sKdKuChtaU67QZqU67KGAvZUTeeBgsL+yaHHxqfQeGZXEQ==}
@@ -1250,6 +1263,9 @@ packages:
   '@xmldom/xmldom@0.8.10':
     resolution: {integrity: sha512-2WALfTl4xo2SkGCYRt6rDTFfk9R1czmBvUQy12gK2KuRKIpWEhcbbzy8EZXtz/jkRqHX8bFEc6FC1HjX4TUWYw==}
     engines: {node: '>=10.0.0'}
+
+  '@xterm/xterm@6.0.0':
+    resolution: {integrity: sha512-TQwDdQGtwwDt+2cgKDLn0IRaSxYu1tSUjgKarSDkUM0ZNiSRXFpjxEsvc/Zgc5kq5omJ+V0a8/kIM2WD3sMOYg==}
 
   abbrev@1.1.1:
     resolution: {integrity: sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==}
@@ -3281,6 +3297,11 @@ packages:
   spdx-license-ids@3.0.21:
     resolution: {integrity: sha512-Bvg/8F5XephndSK3JffaRqdT+gyhfqIPwDHpX80tJrF8QQRYMo8sNMeaZ2Dp5+jhwKnUmIOyFFQfHRkjJm5nXg==}
 
+  splitpanes@4.0.4:
+    resolution: {integrity: sha512-RbysugZhjbCw5fgplvk3hOXr41stahQDtZhHVkhnnJI6H4wlGDhM2kIpbehy7v92duy9GnMa8zIhHigIV1TWtg==}
+    peerDependencies:
+      vue: ^3.2.0
+
   sprintf-js@1.0.3:
     resolution: {integrity: sha512-D9cPgkvLlV3t3IzL0D0YLvGA9Ahk4PcvVwUbN0dSGr1aP0Nrt4AEnTUbuGvquEC0mA64Gqt1fzirlRs5ibXx8g==}
 
@@ -4213,6 +4234,12 @@ snapshots:
     dependencies:
       '@babel/runtime': 7.27.1
 
+  '@grapoza/vue-tree@7.0.4(typescript@4.9.5)':
+    dependencies:
+      vue: 3.5.13(typescript@4.9.5)
+    transitivePeerDependencies:
+      - typescript
+
   '@icon-park/vue-next@1.4.2(vue@3.5.13(typescript@4.9.5))':
     dependencies:
       vue: 3.5.13(typescript@4.9.5)
@@ -4877,6 +4904,8 @@ snapshots:
       vue: 3.5.13(typescript@4.9.5)
 
   '@xmldom/xmldom@0.8.10': {}
+
+  '@xterm/xterm@6.0.0': {}
 
   abbrev@1.1.1:
     optional: true
@@ -7158,6 +7187,10 @@ snapshots:
       spdx-license-ids: 3.0.21
 
   spdx-license-ids@3.0.21: {}
+
+  splitpanes@4.0.4(vue@3.5.13(typescript@4.9.5)):
+    dependencies:
+      vue: 3.5.13(typescript@4.9.5)
 
   sprintf-js@1.0.3: {}
 
