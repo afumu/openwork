@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { OpenAIChatService } from '../aiTool/chat/chat.service';
 import { AgentModelProxyService } from '../aiTool/chat/agentModelProxy.service';
 import { PiRuntimeManagerService } from '../aiTool/chat/piRuntimeManager';
+import { RuntimeTerminalGatewayService } from '../aiTool/chat/runtimeTerminalGateway';
 import { NetSearchService } from '../aiTool/search/netSearch.service';
 import { AppEntity } from '../app/app.entity';
 import { AppService } from '../app/app.service';
@@ -84,11 +85,12 @@ import { ChatService } from './chat.service';
     OpenAIChatService,
     AgentModelProxyService,
     PiRuntimeManagerService,
+    RuntimeTerminalGatewayService,
     NetSearchService,
     ExpertDiscoveryService,
     GroupDiscussionService,
     AppService,
   ],
-  exports: [ChatService, OpenAIChatService],
+  exports: [ChatService, OpenAIChatService, RuntimeTerminalGatewayService],
 })
 export class ChatModule {}

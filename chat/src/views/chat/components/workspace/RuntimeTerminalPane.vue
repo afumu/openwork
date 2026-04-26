@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { executeRuntimeCommandAPI } from '@/api/runtime'
+import { useAuthStore } from '@/store/modules/auth'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { toTerminalLines, unwrapRuntimeCommandPayload } from './ideWorkspace'
-import type { RuntimeCommandResult, ToolExecutionLike } from './ideWorkspace'
+import { parseRuntimeTerminalServerMessage, buildRuntimeTerminalWsUrl } from './runtimeTerminal'
+import { toTerminalLines } from './ideWorkspace'
+import type { ToolExecutionLike } from './ideWorkspace'
 
 interface ToolExecutionRecord extends ToolExecutionLike {
   event?: string
@@ -21,12 +22,11 @@ const props = defineProps<{
 }>()
 
 const terminalEl = ref<HTMLDivElement | null>(null)
-const commandOutputLines = ref<string[]>([])
-const currentInput = ref('')
 const currentContainerName = ref('')
 const currentCwd = ref('')
-const commandRunning = ref(false)
+const terminalStatus = ref<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected')
 let terminal: Terminal | null = null
+let terminalSocket: WebSocket | null = null
 
 const records = computed<ToolExecutionRecord[]>(() => {
   return props.chats.flatMap(chat => [
@@ -36,10 +36,13 @@ const records = computed<ToolExecutionRecord[]>(() => {
 })
 
 const terminalLines = computed(() => toTerminalLines(records.value))
-const fallbackCwd = computed(() =>
-  props.groupId ? `/workspace/conversations/${props.groupId}` : '/workspace'
-)
-const promptCwd = computed(() => currentCwd.value || fallbackCwd.value)
+const authStore = useAuthStore()
+const statusLabel = computed(() => {
+  if (terminalStatus.value === 'connecting') return '连接容器中'
+  if (terminalStatus.value === 'connected') return props.isStreaming ? '任务执行中' : '已连接'
+  if (terminalStatus.value === 'error') return '连接失败'
+  return '未连接'
+})
 
 function parseJsonRecords(value?: string | null): ToolExecutionRecord[] {
   if (!value) return []
@@ -91,10 +94,17 @@ function createTerminal() {
   })
   terminal.open(terminalEl.value)
   terminal.onData(handleTerminalData)
-  renderTerminal()
+  terminal.onResize(size => {
+    sendTerminalMessage({
+      cols: size.cols,
+      rows: size.rows,
+      type: 'resize',
+    })
+  })
+  renderInitialTerminal()
 }
 
-function renderTerminal() {
+function renderInitialTerminal() {
   if (!terminal) return
 
   terminal.options.cursorBlink = props.isStreaming
@@ -107,12 +117,6 @@ function renderTerminal() {
       terminal?.writeln(colorizeTerminalLine(line))
     })
   }
-
-  commandOutputLines.value.forEach(line => {
-    terminal?.writeln(line)
-  })
-
-  writePrompt()
 }
 
 function colorizeTerminalLine(line: string) {
@@ -129,124 +133,108 @@ function colorizeTerminalLine(line: string) {
 }
 
 function clearTerminal() {
-  commandOutputLines.value = []
-  currentInput.value = ''
-  renderTerminal()
+  terminal?.clear()
 }
 
-function writePrompt() {
-  terminal?.write(`\r\n\x1b[32mroot@localhost\x1b[0m:\x1b[36m${promptCwd.value}\x1b[0m# `)
-  if (currentInput.value) terminal?.write(currentInput.value)
+function startNewTerminal() {
+  renderInitialTerminal()
+  connectTerminal()
 }
 
 function handleTerminalData(data: string) {
-  if (!terminal || commandRunning.value) return
+  sendTerminalMessage({
+    data,
+    type: 'input',
+  })
+}
 
-  if (data === '\r') {
-    void submitCommand()
-    return
-  }
-
-  if (data === '\u0003') {
-    currentInput.value = ''
-    terminal.write('^C')
-    writePrompt()
-    return
-  }
-
-  if (data === '\u007f') {
-    if (!currentInput.value) return
-    currentInput.value = currentInput.value.slice(0, -1)
-    terminal.write('\b \b')
-    return
-  }
-
-  if (/^[\x20-\x7E]$/.test(data)) {
-    currentInput.value += data
-    terminal.write(data)
+function sendTerminalMessage(payload: Record<string, any>) {
+  if (terminalSocket?.readyState === WebSocket.OPEN) {
+    terminalSocket.send(JSON.stringify(payload))
   }
 }
 
-async function submitCommand() {
-  if (!terminal) return
+function disconnectTerminal() {
+  terminalSocket?.close()
+  terminalSocket = null
+  terminalStatus.value = 'disconnected'
+}
 
-  const command = currentInput.value.trim()
-  currentInput.value = ''
-  terminal.writeln('')
+function connectTerminal() {
+  disconnectTerminal()
+  if (!terminal || !props.groupId) return
 
-  if (!command) {
-    writePrompt()
+  const token = authStore.token
+  if (!token) {
+    terminal.writeln('\x1b[31m请先登录后再打开终端\x1b[0m')
+    terminalStatus.value = 'error'
     return
   }
 
-  if (!props.groupId) {
-    terminal.writeln('\x1b[31m当前没有可执行的对话工作区\x1b[0m')
-    writePrompt()
-    return
-  }
+  terminalStatus.value = 'connecting'
+  terminal.writeln('\x1b[90m正在连接容器终端...\x1b[0m')
 
-  commandRunning.value = true
-  commandOutputLines.value.push(
-    `\x1b[32mroot@localhost\x1b[0m:\x1b[36m${promptCwd.value}\x1b[0m# ${command}`
-  )
-
-  try {
-    const res: any = await executeRuntimeCommandAPI({
-      cwd: currentCwd.value || undefined,
+  const socket = new WebSocket(
+    buildRuntimeTerminalWsUrl({
+      apiBaseUrl: import.meta.env.VITE_GLOB_API_URL,
+      cols: terminal.cols,
       groupId: props.groupId,
-      command,
+      rows: terminal.rows,
+      token,
+      windowLocation: window.location,
     })
-    const result = unwrapRuntimeCommandPayload(res)
-    if (!result) throw new Error('终端命令返回格式不正确')
+  )
+  terminalSocket = socket
 
-    currentContainerName.value = result.containerName || currentContainerName.value
-    currentCwd.value = result.cwd || currentCwd.value
-    writeCommandOutput(result.stdout)
-    writeCommandOutput(result.stderr, true)
-    if (result.code !== 0) terminal.writeln(`\x1b[31mexit ${result.code}\x1b[0m`)
+  socket.addEventListener('open', () => {
+    terminalStatus.value = 'connected'
+  })
 
-    commandOutputLines.value.push(...formatCommandResultLines(result))
-  } catch (error: any) {
-    const message = error?.message || '终端命令执行失败'
-    terminal.writeln(`\x1b[31m${message}\x1b[0m`)
-    commandOutputLines.value.push(`\x1b[31m${message}\x1b[0m`)
-  } finally {
-    commandRunning.value = false
-    writePrompt()
-  }
-}
+  socket.addEventListener('message', event => {
+    const message = parseRuntimeTerminalServerMessage(String(event.data))
+    if (!message) return
 
-function writeCommandOutput(value?: string, isError = false) {
-  if (!value) return
-  value
-    .replace(/\r\n/g, '\n')
-    .split('\n')
-    .filter(Boolean)
-    .forEach(line => {
-      terminal?.writeln(isError ? `\x1b[31m${line}\x1b[0m` : line)
-    })
-}
+    if (message.type === 'ready') {
+      currentContainerName.value = message.containerName || ''
+      currentCwd.value = message.cwd || ''
+      terminalStatus.value = 'connected'
+      return
+    }
 
-function formatCommandResultLines(result: RuntimeCommandResult) {
-  const lines: string[] = []
-  if (result.stdout) lines.push(...result.stdout.replace(/\r\n/g, '\n').split('\n').filter(Boolean))
-  if (result.stderr) {
-    lines.push(
-      ...result.stderr
-        .replace(/\r\n/g, '\n')
-        .split('\n')
-        .filter(Boolean)
-        .map((line: string) => `\x1b[31m${line}\x1b[0m`)
-    )
-  }
-  if (result.code !== 0) lines.push(`\x1b[31mexit ${result.code}\x1b[0m`)
-  return lines
+    if (message.type === 'output') {
+      terminal?.write(message.data)
+      return
+    }
+
+    if (message.type === 'error') {
+      terminalStatus.value = 'error'
+      terminal?.writeln(`\r\n\x1b[31m${message.message}\x1b[0m`)
+      return
+    }
+
+    if (message.type === 'exit') {
+      terminalStatus.value = 'disconnected'
+      terminal?.writeln(`\r\n\x1b[90m终端已退出${message.code ? ` (${message.code})` : ''}\x1b[0m`)
+    }
+  })
+
+  socket.addEventListener('close', () => {
+    if (terminalSocket === socket) {
+      terminalSocket = null
+      if (terminalStatus.value !== 'error') terminalStatus.value = 'disconnected'
+    }
+  })
+
+  socket.addEventListener('error', () => {
+    terminalStatus.value = 'error'
+    terminal?.writeln('\r\n\x1b[31m终端连接失败\x1b[0m')
+  })
 }
 
 watch(
   () => [terminalLines.value.join('\n'), props.isStreaming] as const,
   () => {
-    void nextTick(renderTerminal)
+    terminal && (terminal.options.cursorBlink = props.isStreaming)
   }
 )
 
@@ -255,15 +243,20 @@ watch(
   () => {
     currentContainerName.value = ''
     currentCwd.value = ''
-    void nextTick(renderTerminal)
+    void nextTick(() => {
+      renderInitialTerminal()
+      connectTerminal()
+    })
   }
 )
 
 onMounted(() => {
   createTerminal()
+  connectTerminal()
 })
 
 onBeforeUnmount(() => {
+  disconnectTerminal()
   terminal?.dispose()
   terminal = null
 })
@@ -283,9 +276,9 @@ onBeforeUnmount(() => {
         <span v-if="currentContainerName" class="max-w-[220px] truncate">
           容器 {{ currentContainerName }}
         </span>
-        <span>{{ commandRunning ? '执行命令中' : isStreaming ? '任务执行中' : '空闲' }}</span>
+        <span>{{ statusLabel }}</span>
         <button class="terminal-action" type="button" @click="clearTerminal">清理</button>
-        <button class="terminal-icon" type="button" title="新终端">＋</button>
+        <button class="terminal-icon" type="button" title="新终端" @click="startNewTerminal">＋</button>
         <button class="terminal-icon" type="button" title="聚焦">⛶</button>
       </div>
     </header>
