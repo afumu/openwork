@@ -8,7 +8,7 @@ import { python } from '@codemirror/lang-python'
 import { rust } from '@codemirror/lang-rust'
 import { sql } from '@codemirror/lang-sql'
 import { EditorView, basicSetup } from 'codemirror'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { resolveCodeLanguage } from './ideWorkspace'
 import type { ArtifactReadResult } from './types'
 
@@ -50,7 +50,8 @@ function languageExtension() {
   }
 }
 
-function mountEditor() {
+async function mountEditor() {
+  await nextTick()
   if (!editorEl.value) return
   view?.destroy()
   view = new EditorView({
@@ -67,8 +68,12 @@ function mountEditor() {
           height: '100%',
           fontSize: '13px',
         },
+        '.cm-editor': {
+          height: '100%',
+        },
         '.cm-content': {
           caretColor: '#2563eb',
+          minHeight: '100%',
         },
         '.cm-gutters': {
           backgroundColor: '#f8fafc',
@@ -80,6 +85,8 @@ function mountEditor() {
         },
         '.cm-scroller': {
           fontFamily: 'JetBrains Mono, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+          height: '100%',
+          overflow: 'auto',
         },
       }),
     ],
@@ -89,10 +96,15 @@ function mountEditor() {
 
 watch(
   () => [props.file?.path, props.file?.content, props.readonly] as const,
-  () => mountEditor()
+  () => {
+    void mountEditor()
+  },
+  { flush: 'post' }
 )
 
-onMounted(() => mountEditor())
+onMounted(() => {
+  void mountEditor()
+})
 
 onBeforeUnmount(() => {
   view?.destroy()
@@ -117,6 +129,17 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div v-else ref="editorEl" class="min-h-0 flex-1 overflow-hidden" />
+    <div v-else ref="editorEl" class="code-editor-host min-h-0 flex-1 overflow-hidden" />
   </section>
 </template>
+
+<style scoped>
+.code-editor-host :deep(.cm-editor) {
+  height: 100%;
+}
+
+.code-editor-host :deep(.cm-scroller) {
+  height: 100%;
+  overflow: auto;
+}
+</style>
