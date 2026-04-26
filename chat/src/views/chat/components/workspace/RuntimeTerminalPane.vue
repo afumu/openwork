@@ -23,6 +23,8 @@ const props = defineProps<{
 const terminalEl = ref<HTMLDivElement | null>(null)
 const commandOutputLines = ref<string[]>([])
 const currentInput = ref('')
+const currentContainerName = ref('')
+const currentCwd = ref('')
 const commandRunning = ref(false)
 let terminal: Terminal | null = null
 
@@ -34,6 +36,10 @@ const records = computed<ToolExecutionRecord[]>(() => {
 })
 
 const terminalLines = computed(() => toTerminalLines(records.value))
+const fallbackCwd = computed(() =>
+  props.groupId ? `/workspace/conversations/${props.groupId}` : '/workspace'
+)
+const promptCwd = computed(() => currentCwd.value || fallbackCwd.value)
 
 function parseJsonRecords(value?: string | null): ToolExecutionRecord[] {
   if (!value) return []
@@ -129,7 +135,7 @@ function clearTerminal() {
 }
 
 function writePrompt() {
-  terminal?.write('\r\n\x1b[32mroot@localhost\x1b[0m:\x1b[36m/workspace/projects\x1b[0m# ')
+  terminal?.write(`\r\n\x1b[32mroot@localhost\x1b[0m:\x1b[36m${promptCwd.value}\x1b[0m# `)
   if (currentInput.value) terminal?.write(currentInput.value)
 }
 
@@ -181,7 +187,7 @@ async function submitCommand() {
 
   commandRunning.value = true
   commandOutputLines.value.push(
-    `\x1b[32mroot@localhost\x1b[0m:\x1b[36m/workspace/projects\x1b[0m# ${command}`
+    `\x1b[32mroot@localhost\x1b[0m:\x1b[36m${promptCwd.value}\x1b[0m# ${command}`
   )
 
   try {
@@ -189,6 +195,8 @@ async function submitCommand() {
     const result = unwrapCommandResult(res)
     if (!result) throw new Error('终端命令返回格式不正确')
 
+    currentContainerName.value = result.containerName || currentContainerName.value
+    currentCwd.value = result.cwd || currentCwd.value
     writeCommandOutput(result.stdout)
     writeCommandOutput(result.stderr, true)
     if (result.code !== 0) terminal.writeln(`\x1b[31mexit ${result.code}\x1b[0m`)
@@ -245,6 +253,15 @@ watch(
   }
 )
 
+watch(
+  () => props.groupId,
+  () => {
+    currentContainerName.value = ''
+    currentCwd.value = ''
+    void nextTick(renderTerminal)
+  }
+)
+
 onMounted(() => {
   createTerminal()
 })
@@ -266,6 +283,9 @@ onBeforeUnmount(() => {
         <button class="terminal-tab" type="button">输出</button>
       </div>
       <div class="flex items-center gap-3 text-zinc-500">
+        <span v-if="currentContainerName" class="max-w-[220px] truncate">
+          容器 {{ currentContainerName }}
+        </span>
         <span>{{ commandRunning ? '执行命令中' : isStreaming ? '任务执行中' : '空闲' }}</span>
         <button class="terminal-action" type="button" @click="clearTerminal">清理</button>
         <button class="terminal-icon" type="button" title="新终端">＋</button>

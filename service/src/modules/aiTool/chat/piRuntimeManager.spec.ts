@@ -180,4 +180,58 @@ describe('piRuntimeManager helpers', () => {
       userId: 42,
     });
   });
+
+  test('executeCommand runs inside the conversation docker container workspace', async () => {
+    const service = new PiRuntimeManagerService({} as any) as any;
+    service.dockerEnabled = true;
+    service.workspaceVolumePath = '/workspace';
+    service.ensureRuntime = jest.fn().mockResolvedValue({
+      baseUrl: 'http://127.0.0.1:49153',
+      containerName: 'openwork-user-42-group-128',
+      mode: 'docker',
+    });
+    service.runDocker = jest.fn().mockResolvedValue({
+      stderr: '',
+      stdout: '/workspace/conversations/128\n',
+    });
+
+    await expect(
+      service.executeCommand({ groupId: 128, userId: 42 }, 'conversations/128', 'pwd', 'trace-1'),
+    ).resolves.toEqual({
+      code: 0,
+      command: 'pwd',
+      containerName: 'openwork-user-42-group-128',
+      cwd: '/workspace/conversations/128',
+      mode: 'docker',
+      stderr: '',
+      stdout: '/workspace/conversations/128\n',
+    });
+    expect(service.runDocker).toHaveBeenCalledWith(
+      [
+        'exec',
+        'openwork-user-42-group-128',
+        'sh',
+        '-lc',
+        "mkdir -p '/workspace/conversations/128' && cd '/workspace/conversations/128' && pwd",
+      ],
+      'trace-1',
+      false,
+      30000,
+    );
+  });
+
+  test('executeCommand rejects direct mode instead of pretending to be a container terminal', async () => {
+    const service = new PiRuntimeManagerService({} as any) as any;
+    service.dockerEnabled = false;
+    service.ensureRuntime = jest.fn().mockResolvedValue({
+      baseUrl: 'http://127.0.0.1:8787',
+      mode: 'direct',
+    });
+    service.executeDirectCommand = jest.fn();
+
+    await expect(
+      service.executeCommand({ groupId: 128, userId: 42 }, 'conversations/128', 'pwd', 'trace-1'),
+    ).rejects.toThrow('当前运行时不是容器模式，无法连接容器终端');
+    expect(service.executeDirectCommand).not.toHaveBeenCalled();
+  });
 });

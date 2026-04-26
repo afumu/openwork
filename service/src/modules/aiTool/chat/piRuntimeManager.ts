@@ -58,7 +58,9 @@ export type PiRuntimeScope = {
 export type RuntimeCommandResult = {
   code: number;
   command: string;
+  containerName: string;
   cwd: string;
+  mode: 'docker';
   stderr: string;
   stdout: string;
   timedOut?: boolean;
@@ -345,15 +347,15 @@ export class PiRuntimeManagerService {
     const runtime = await this.ensureRuntime(scope, traceId);
     const cwd = resolveRuntimeWorkspacePath(this.workspaceVolumePath, workspaceDir);
 
-    if (runtime.mode === 'docker') {
-      if (!runtime.containerName) {
-        throw new Error('PI runtime 容器不可用');
-      }
-
-      return this.executeDockerCommand(runtime.containerName, cwd, command, traceId);
+    if (runtime.mode !== 'docker') {
+      throw new Error('当前运行时不是容器模式，无法连接容器终端');
     }
 
-    return this.executeDirectCommand(workspaceDir, command);
+    if (!runtime.containerName) {
+      throw new Error('PI runtime 容器不可用');
+    }
+
+    return this.executeDockerCommand(runtime.containerName, cwd, command, traceId);
   }
 
   private async executeDockerCommand(
@@ -374,7 +376,9 @@ export class PiRuntimeManagerService {
       return {
         code: 0,
         command,
+        containerName,
         cwd,
+        mode: 'docker',
         stderr: result.stderr || '',
         stdout: result.stdout || '',
       };
@@ -382,42 +386,9 @@ export class PiRuntimeManagerService {
       return {
         code: typeof error?.code === 'number' ? error.code : 1,
         command,
+        containerName,
         cwd,
-        stderr: error?.stderr || error?.message || '',
-        stdout: error?.stdout || '',
-        timedOut: Boolean(error?.killed),
-      };
-    }
-  }
-
-  private async executeDirectCommand(
-    workspaceDir: string,
-    command: string,
-  ): Promise<RuntimeCommandResult> {
-    const workspaceRoot =
-      process.env.PI_RUNTIME_WORKSPACE_ROOT || process.env.PI_OPENAI_CWD || process.cwd();
-    const cwd = resolvePath(workspaceRoot, workspaceDir);
-    await fs.mkdir(cwd, { recursive: true });
-
-    try {
-      const result = await execFileAsync('sh', ['-lc', command], {
-        cwd,
-        env: process.env,
-        maxBuffer: 1024 * 1024 * 4,
-        timeout: 30000,
-      });
-      return {
-        code: 0,
-        command,
-        cwd,
-        stderr: result.stderr || '',
-        stdout: result.stdout || '',
-      };
-    } catch (error: any) {
-      return {
-        code: typeof error?.code === 'number' ? error.code : 1,
-        command,
-        cwd,
+        mode: 'docker',
         stderr: error?.stderr || error?.message || '',
         stdout: error?.stdout || '',
         timedOut: Boolean(error?.killed),
