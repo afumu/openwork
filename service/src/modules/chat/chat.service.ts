@@ -293,7 +293,12 @@ export class ChatService {
       }
     }
 
-    const piAbort = await this.openAIChatService.abortPiSession(sessionId, req?.user?.id, traceId);
+    const piAbort = await this.openAIChatService.abortPiSession(
+      sessionId,
+      req?.user?.id,
+      body?.groupId || (body?.chatId ? `chat-${body.chatId}` : sessionId),
+      traceId,
+    );
     this.logTrace('log', traceId, '收到停止聊天请求并已尝试中断', {
       abortedRequestCount,
       chatId: body?.chatId ?? null,

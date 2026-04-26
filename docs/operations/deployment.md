@@ -1,6 +1,6 @@
 # 部署说明
 
-OpenWork 的主服务使用 Node + PM2 运行；按用户隔离的运行时容器则通过 Docker 承载。
+OpenWork 的主服务使用 Node + PM2 运行；按对话组隔离的运行时容器则通过 Docker 承载。
 
 ## 主要组成
 

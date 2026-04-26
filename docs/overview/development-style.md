@@ -236,7 +236,7 @@
 ### 当前架构事实
 
 - 主服务部署以 `Node + PM2` 为主
-- Docker 主要用于“按用户隔离的 PI runtime 容器”
+- Docker 主要用于“按对话组隔离的 PI runtime 容器”
 - 不要把仓库重新改回“单体 Docker Compose 承载全部线上部署”的思路
 
 ### Shell 脚本
@@ -279,8 +279,8 @@
 
 参考 [service/src/modules/aiTool/chat/piRuntimeManager.ts](../../service/src/modules/aiTool/chat/piRuntimeManager.ts)：
 
-- 用户运行时容器名：`openwork-user-<userId>`
-- 工作区卷名：`openwork-user-<userId>-workspace`
+- 对话组运行时容器名：`openwork-user-<userId>-group-<groupId>`
+- 工作区卷名：`openwork-user-<userId>-group-<groupId>-workspace`
 - 容器 label：`openwork.pi.runtime=1`
 - 环境变量使用 `PI_*` / `OPENWORK_*` 前缀
 - 容器侧配置优先通过显式环境变量和挂载目录传入
@@ -303,6 +303,6 @@
 - `admin/` 保持有分号管理台风格
 - `service/` 保持 Nest 模块化后端风格
 - `pi/` 保持 Biome 双引号 + Tab 风格
-- 容器与运行时脚本保持“显式校验、最小职责、按用户隔离”的实现方式
+- 容器与运行时脚本保持“显式校验、最小职责、按对话组隔离”的实现方式
 
 如果未来仓库风格发生系统性调整，应先更新本文档，再批量修改代码。

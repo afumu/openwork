@@ -35,5 +35,5 @@ else
 fi
 
 echo
-echo "Existing PI user containers:"
+echo "Existing PI conversation containers:"
 docker ps -a --filter "label=openwork.pi.runtime=1" --format '  {{.Names}}\t{{.Image}}\t{{.Status}}' || true

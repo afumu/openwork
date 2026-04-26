@@ -41,6 +41,7 @@ export type PiRuntimeDescriptor = {
   baseUrl: string;
   containerId?: string;
   containerName?: string;
+  groupId?: number | string;
   hostPort?: number;
   mode: 'docker' | 'direct';
   running?: boolean;
@@ -49,10 +50,36 @@ export type PiRuntimeDescriptor = {
   volumeName?: string;
 };
 
-export function buildPiRuntimeNames(userId: number) {
+export type PiRuntimeScope = {
+  groupId: number | string;
+  userId: number;
+};
+
+function normalizeRuntimeGroupId(groupId: number | string) {
+  if (typeof groupId === 'number') {
+    if (!Number.isInteger(groupId) || groupId <= 0) {
+      throw new Error('非法的对话分组 ID');
+    }
+    return String(groupId);
+  }
+
+  const normalized = String(groupId || '')
+    .trim()
+    .replace(/[^A-Za-z0-9_.-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  if (!normalized) {
+    throw new Error('非法的对话分组 ID');
+  }
+
+  return normalized;
+}
+
+export function buildPiRuntimeNames(scope: PiRuntimeScope) {
+  const groupId = normalizeRuntimeGroupId(scope.groupId);
   return {
-    containerName: `openwork-user-${userId}`,
-    volumeName: `openwork-user-${userId}-workspace`,
+    containerName: `openwork-user-${scope.userId}-group-${groupId}`,
+    volumeName: `openwork-user-${scope.userId}-group-${groupId}-workspace`,
   };
 }
 
@@ -119,6 +146,8 @@ export function resolveRuntimeBootstrapAgentFiles() {
 export class PiRuntimeManagerService {
   constructor(private readonly redisCacheService: RedisCacheService) {}
 
+  private readonly pendingRuntimeEnsures = new Map<string, Promise<PiRuntimeDescriptor>>();
+
   private readonly directGatewayBaseUrl =
     process.env.PI_GATEWAY_BASE_URL || 'http://127.0.0.1:8787';
   private readonly dockerEnabled = process.env.PI_DOCKER_ENABLED === '1';
@@ -165,7 +194,7 @@ export class PiRuntimeManagerService {
     return `http://${host}:${this.internalSearchServicePort}${this.internalModelProxyPath}`;
   }
 
-  async ensureRuntime(userId: number, traceId?: string): Promise<PiRuntimeDescriptor> {
+  async ensureRuntime(scope: PiRuntimeScope, traceId?: string): Promise<PiRuntimeDescriptor> {
     if (!this.dockerEnabled) {
       return {
         baseUrl: this.getDirectGatewayBaseUrl(),
@@ -173,7 +202,27 @@ export class PiRuntimeManagerService {
       };
     }
 
-    const { containerName, volumeName } = buildPiRuntimeNames(userId);
+    const { containerName, volumeName } = buildPiRuntimeNames(scope);
+    const pendingEnsure = this.pendingRuntimeEnsures.get(containerName);
+    if (pendingEnsure) {
+      return pendingEnsure;
+    }
+
+    const ensurePromise = this.ensureDockerRuntime(scope, containerName, volumeName, traceId).finally(
+      () => {
+        this.pendingRuntimeEnsures.delete(containerName);
+      },
+    );
+    this.pendingRuntimeEnsures.set(containerName, ensurePromise);
+    return ensurePromise;
+  }
+
+  private async ensureDockerRuntime(
+    scope: PiRuntimeScope,
+    containerName: string,
+    volumeName: string,
+    traceId?: string,
+  ): Promise<PiRuntimeDescriptor> {
     let inspectResult = await this.inspectContainer(containerName);
 
     if (
@@ -187,7 +236,7 @@ export class PiRuntimeManagerService {
     }
 
     if (!inspectResult) {
-      await this.createRuntime(userId, traceId);
+      await this.createRuntime(scope, traceId);
       inspectResult = await this.inspectContainer(containerName);
     }
 
@@ -209,11 +258,12 @@ export class PiRuntimeManagerService {
       baseUrl: `http://${this.dockerHost}:${hostPort}`,
       containerId: inspectResult.Id,
       containerName,
+      groupId: scope.groupId,
       hostPort,
       mode: 'docker',
       running: Boolean(inspectResult.State?.Running),
       status: inspectResult.State?.Status,
-      userId,
+      userId: scope.userId,
       volumeName,
     };
 
@@ -222,7 +272,7 @@ export class PiRuntimeManagerService {
     return descriptor;
   }
 
-  async findRuntime(userId: number, startIfStopped = false, traceId?: string) {
+  async findRuntime(scope: PiRuntimeScope, startIfStopped = false, traceId?: string) {
     if (!this.dockerEnabled) {
       return {
         baseUrl: this.getDirectGatewayBaseUrl(),
@@ -230,7 +280,7 @@ export class PiRuntimeManagerService {
       };
     }
 
-    const { containerName, volumeName } = buildPiRuntimeNames(userId);
+    const { containerName, volumeName } = buildPiRuntimeNames(scope);
     let inspectResult = await this.inspectContainer(containerName);
     if (!inspectResult) {
       return null;
@@ -254,17 +304,19 @@ export class PiRuntimeManagerService {
       baseUrl: `http://${this.dockerHost}:${hostPort}`,
       containerId: inspectResult.Id,
       containerName,
+      groupId: scope.groupId,
       hostPort,
       mode: 'docker' as const,
       running: Boolean(inspectResult.State?.Running),
       status: inspectResult.State?.Status,
-      userId,
+      userId: scope.userId,
       volumeName,
     };
   }
 
-  private async createRuntime(userId: number, traceId?: string) {
-    const { containerName, volumeName } = buildPiRuntimeNames(userId);
+  private async createRuntime(scope: PiRuntimeScope, traceId?: string) {
+    const { containerName, volumeName } = buildPiRuntimeNames(scope);
+    const runtimeGroupId = normalizeRuntimeGroupId(scope.groupId);
     const internalSearchToken = await this.resolveInternalSearchToken();
     const internalSearchUrl = this.resolveInternalSearchUrl();
     await this.runDocker(['volume', 'create', volumeName], traceId).catch(() => undefined);
@@ -283,7 +335,9 @@ export class PiRuntimeManagerService {
       '--label',
       'openwork.pi.runtime=1',
       '--label',
-      `openwork.user-id=${userId}`,
+      `openwork.user-id=${scope.userId}`,
+      '--label',
+      `openwork.group-id=${runtimeGroupId}`,
       '--restart',
       'unless-stopped',
       '--add-host',

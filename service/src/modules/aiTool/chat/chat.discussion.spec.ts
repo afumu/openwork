@@ -124,4 +124,73 @@ describe('OpenAIChatService discussion runtime requests', () => {
 
     global.fetch = originalFetch;
   });
+
+  it('resolves docker discussion runtime by conversation group', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: jest.fn().mockResolvedValue({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({ ok: true }),
+            },
+          },
+        ],
+      }),
+    });
+    const originalFetch = global.fetch;
+    global.fetch = fetchMock;
+
+    const ensureRuntime = jest.fn().mockResolvedValue({
+      baseUrl: 'http://127.0.0.1:49153',
+    });
+    const service = new OpenAIChatService(
+      {
+        getConfigs: jest.fn().mockResolvedValue('gpt-5.3-codex'),
+      } as any,
+      {
+        getWebSearchCapabilityProfile: jest.fn().mockResolvedValue(undefined),
+      } as any,
+      {
+        ensureRuntime,
+        isDockerEnabled: jest.fn().mockReturnValue(true),
+        resolveInternalModelProxyBaseUrl: jest
+          .fn()
+          .mockReturnValue('http://host.docker.internal:9527/api/openwork/internal/model-proxy/v1'),
+      } as any,
+      {
+        createRun: jest.fn().mockResolvedValue({
+          agentRunId: 'agent_run_456',
+          modelProxy: {
+            apiKey: 'proxy-token',
+            baseUrl: 'http://host.docker.internal:9527/api/openwork/internal/model-proxy/v1',
+            model: 'gpt-5.3-codex',
+          },
+        }),
+        settleRun: jest.fn().mockResolvedValue({
+          agentRunId: 'agent_run_456',
+          settled: true,
+        }),
+      } as any,
+    );
+
+    await service.requestPiDiscussion({
+      action: 'discover_experts',
+      groupId: 128,
+      payload: { topic: 'AI infra' },
+      sessionId: 'discussion-128',
+      traceId: 'trace-2',
+      userId: 7,
+    });
+
+    expect(ensureRuntime).toHaveBeenCalledWith({ groupId: 128, userId: 7 }, 'trace-2');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:49153/v1/chat/completions',
+      expect.objectContaining({
+        method: 'POST',
+      }),
+    );
+
+    global.fetch = originalFetch;
+  });
 });

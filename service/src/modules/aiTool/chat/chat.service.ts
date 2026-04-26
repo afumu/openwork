@@ -142,12 +142,25 @@ export class OpenAIChatService {
     return `${baseUrl.replace(/\/+$/, '')}${pathname.startsWith('/') ? pathname : `/${pathname}`}`;
   }
 
-  private async resolvePiGatewayBaseUrl(userId?: number, traceId?: string) {
+  private async resolvePiGatewayBaseUrl(input: {
+    groupId?: number | string;
+    traceId?: string;
+    userId?: number;
+  }) {
     if (this.piRuntimeManagerService.isDockerEnabled()) {
-      if (!userId) {
+      if (!input.userId) {
         throw new Error('缺少用户 ID，无法定位专属 PI runtime');
       }
-      const runtime = await this.piRuntimeManagerService.ensureRuntime(userId, traceId);
+      if (!input.groupId) {
+        throw new Error('缺少对话分组 ID，无法定位专属 PI runtime');
+      }
+      const runtime = await this.piRuntimeManagerService.ensureRuntime(
+        {
+          groupId: input.groupId,
+          userId: input.userId,
+        },
+        input.traceId,
+      );
       return runtime.baseUrl;
     }
 
@@ -167,13 +180,18 @@ export class OpenAIChatService {
     const openaiBaseModel = await this.globalConfigService.getConfigs(['openaiBaseModel']);
     const model = resolveDiscussionModel(openaiBaseModel);
     const sessionId = input.sessionId || `discussion-${input.roomId || input.groupId || 'default'}`;
+    const runtimeGroupId = input.groupId || input.roomId || sessionId;
     const workspaceDir =
       input.workspaceDir ||
       (input.groupId
         ? resolveConversationWorkspace(Number(input.groupId))
         : `conversations/${sessionId}`);
     const piGatewayUrl = this.buildPiGatewayUrl(
-      await this.resolvePiGatewayBaseUrl(input.userId, input.traceId),
+      await this.resolvePiGatewayBaseUrl({
+        groupId: runtimeGroupId,
+        traceId: input.traceId,
+        userId: input.userId,
+      }),
       '/v1/chat/completions',
     );
 
@@ -265,10 +283,20 @@ export class OpenAIChatService {
     }
   }
 
-  async abortPiSession(sessionId: string, userId?: number, traceId?: string) {
+  async abortPiSession(
+    sessionId: string,
+    userId?: number,
+    groupId?: number | string,
+    traceId?: string,
+  ) {
+    const runtimeGroupId = groupId || sessionId;
     if (this.piRuntimeManagerService.isDockerEnabled()) {
       const runtime = userId
-        ? await this.piRuntimeManagerService.findRuntime(userId, false, traceId)
+        ? await this.piRuntimeManagerService.findRuntime(
+            { groupId: runtimeGroupId, userId },
+            false,
+            traceId,
+          )
         : null;
       if (!runtime) {
         return {
@@ -281,7 +309,11 @@ export class OpenAIChatService {
       }
     }
 
-    const baseUrl = await this.resolvePiGatewayBaseUrl(userId, traceId);
+    const baseUrl = await this.resolvePiGatewayBaseUrl({
+      groupId: runtimeGroupId,
+      traceId,
+      userId,
+    });
     const abortUrl = this.piRuntimeManagerService.isDockerEnabled()
       ? this.buildPiGatewayUrl(baseUrl, '/v1/chat/sessions/abort')
       : this.getPiGatewayAbortUrl();
@@ -334,7 +366,7 @@ export class OpenAIChatService {
   }
 
   async listArtifacts(userId: number, groupId: number, traceId?: string) {
-    const baseUrl = await this.resolvePiGatewayBaseUrl(userId, traceId);
+    const baseUrl = await this.resolvePiGatewayBaseUrl({ groupId, traceId, userId });
     const url = this.buildPiGatewayUrl(baseUrl, '/v1/artifacts/list');
     const workspaceDir = resolveConversationWorkspace(groupId);
 
@@ -371,7 +403,7 @@ export class OpenAIChatService {
     artifactPath: string,
     traceId?: string,
   ) {
-    const baseUrl = await this.resolvePiGatewayBaseUrl(userId, traceId);
+    const baseUrl = await this.resolvePiGatewayBaseUrl({ groupId, traceId, userId });
     const url = this.buildPiGatewayUrl(baseUrl, '/v1/artifacts/read');
     const workspaceDir = resolveConversationWorkspace(groupId);
     const normalizedArtifactPath = normalizeArtifactReadPath(artifactPath, runId);
@@ -415,7 +447,7 @@ export class OpenAIChatService {
     content: string,
     traceId?: string,
   ) {
-    const baseUrl = await this.resolvePiGatewayBaseUrl(userId, traceId);
+    const baseUrl = await this.resolvePiGatewayBaseUrl({ groupId, traceId, userId });
     const url = this.buildPiGatewayUrl(baseUrl, '/v1/artifacts/rewrite');
     const workspaceDir = resolveConversationWorkspace(groupId);
     const normalizedArtifactPath = normalizeArtifactReadPath(artifactPath, runId);
@@ -924,8 +956,13 @@ export class OpenAIChatService {
     const workspaceDir = groupId
       ? resolveConversationWorkspace(groupId)
       : `conversations/chat-${chatId || result.chatId}`;
+    const runtimeGroupId = groupId || `chat-${chatId || result.chatId}`;
     const piGatewayUrl = this.buildPiGatewayUrl(
-      await this.resolvePiGatewayBaseUrl(userId, traceId),
+      await this.resolvePiGatewayBaseUrl({
+        groupId: runtimeGroupId,
+        traceId,
+        userId,
+      }),
       '/v1/chat/completions',
     );
 
