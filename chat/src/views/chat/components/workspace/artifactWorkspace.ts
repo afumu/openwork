@@ -11,6 +11,9 @@ export function unwrapArtifactPayload<T = ArtifactManifest>(payload: any): T | n
   if ('runs' in payload || 'workspaceFiles' in payload || 'workspaceTree' in payload) {
     return payload as T
   }
+  if ('content' in payload && 'path' in payload) {
+    return payload as T
+  }
   if ('data' in payload) return unwrapArtifactPayload<T>(payload.data)
   return null
 }

@@ -15,6 +15,35 @@ test('unwrapArtifactPayload unwraps nested data payloads', () => {
   })
 })
 
+test('unwrapArtifactPayload unwraps nested artifact read results', () => {
+  const payload = {
+    code: 200,
+    data: {
+      data: {
+        content: '<!doctype html><html></html>',
+        path: 'snake.html',
+        size: 31,
+        success: true,
+        truncated: false,
+        type: 'html',
+        updatedAt: '2026-04-26T04:37:13.080Z',
+      },
+      success: true,
+    },
+    success: true,
+  }
+
+  assert.deepEqual(unwrapArtifactPayload(payload), {
+    content: '<!doctype html><html></html>',
+    path: 'snake.html',
+    size: 31,
+    success: true,
+    truncated: false,
+    type: 'html',
+    updatedAt: '2026-04-26T04:37:13.080Z',
+  })
+})
+
 test('flattenArtifactManifestFiles prefers workspace files when present', () => {
   const files = flattenArtifactManifestFiles({
     workspaceFiles: [
