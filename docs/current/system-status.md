@@ -33,6 +33,8 @@ chat 前端
 
 这些前端交互不代表当前后端已经提供运行时容器能力。
 
-### 4. OpenSandbox 是后续运行时方向
+### 4. OpenSandbox 是当前运行时方向
 
-后续运行时容器、命令执行、文件读写和 agent 事件流统一走 OpenSandbox 方案。设计依据见 [OpenSandbox 运行时改造方案](./opensandbox-runtime-plan.md)。
+运行时容器和 agent 对话开始接入 OpenSandbox。`service` 已具备按 `userId + groupId` 创建或复用 sandbox、连接容器内 bridge、把 Claude Code 事件流写回聊天流的基础能力。
+
+命令执行、文件读写和更完整的 agent 事件协议仍按 [OpenSandbox 运行时改造方案](./opensandbox-runtime-plan.md) 继续推进。

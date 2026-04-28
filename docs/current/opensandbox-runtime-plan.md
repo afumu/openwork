@@ -1,11 +1,12 @@
 # OpenSandbox 运行时改造方案
 
-本文记录 OpenWork 后续将运行时容器层迁移到 OpenSandbox 的设计方案。当前阶段只作为实施依据，暂不包含代码实现。
+本文记录 OpenWork 将运行时容器层迁移到 OpenSandbox 的设计方案。
 
 ## 当前基线
 
 - 旧的内置运行时工作区、Docker 容器管理、运行时状态接口和运行时打包流程已移除。
 - 常规聊天先走 `service -> 模型供应商 API`。
+- OpenSandbox agent 模型已开始接入：用户发起聊天时，`service` 可按 `userId + groupId` 创建或复用 sandbox，并通过容器内 bridge 与 Claude Code 对话。
 - `chat/` 中的文件面板、工具执行展示、终端面板等交互暂时保留，后续接 OpenSandbox 时复用。
 - 聊天记录与历史工具轨迹字段保留，用于兼容既有记录展示。
 
@@ -223,10 +224,10 @@ OPENWORK_SANDBOX_MEMORY=4Gi
 
 ### 阶段 1：恢复运行时基础能力
 
-- 新增 OpenSandbox client。
-- 新增 sandbox descriptor 与 workspace resolver。
-- 新增 bridge health check。
-- 提供 `runtime/status` 的 OpenSandbox 版本。
+- 已新增 OpenSandbox client。
+- 已新增 sandbox descriptor 与 workspace resolver。
+- 已新增 bridge health check。
+- 已提供 `runtime/status` 的 OpenSandbox 版本。
 
 ### 阶段 2：接入文件与命令
 
@@ -236,9 +237,9 @@ OPENWORK_SANDBOX_MEMORY=4Gi
 
 ### 阶段 3：接入 CLI agent
 
-- 新增 agent run API。
-- 新增 agent events SSE。
-- 支持外部选择 `claude_code`、`codex` 或其他 agent。
+- 已接入 `claude_code` 聊天下游：`service` 通过 bridge message/events 与长驻 Claude Code 会话交互。
+- 待补充独立 agent run API。
+- 待支持外部选择 `codex` 或其他 agent。
 - 把工具调用、文件变更和任务结果写入聊天日志。
 
 ### 阶段 4：部署化

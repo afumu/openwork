@@ -37,7 +37,20 @@ meta:
   const apiFormatOptions = [
     { label: 'OpenAI 兼容', value: 'openai' },
     { label: 'Anthropic Messages', value: 'anthropic' },
+    { label: 'OpenSandbox Agent', value: 'opensandbox' },
   ];
+
+  const apiFormatLabelMap: Record<string, string> = {
+    anthropic: 'Anthropic',
+    openai: 'OpenAI',
+    opensandbox: 'OpenSandbox',
+  };
+
+  const apiFormatTagTypeMap: Record<string, 'success' | 'warning' | 'info' | 'primary'> = {
+    anthropic: 'warning',
+    openai: 'success',
+    opensandbox: 'primary',
+  };
 
   const formInline = reactive({
     keyType: '',
@@ -620,8 +633,8 @@ meta:
         </el-table-column>
         <el-table-column prop="apiFormat" align="center" label="接口格式" width="140">
           <template #default="scope">
-            <el-tag :type="scope.row.apiFormat === 'anthropic' ? 'warning' : 'success'">
-              {{ scope.row.apiFormat === 'anthropic' ? 'Anthropic' : 'OpenAI' }}
+            <el-tag :type="apiFormatTagTypeMap[scope.row.apiFormat] || 'info'">
+              {{ apiFormatLabelMap[scope.row.apiFormat] || scope.row.apiFormat || 'OpenAI' }}
             </el-tag>
           </template>
         </el-table-column>
@@ -870,7 +883,8 @@ meta:
             <template #content>
               <div style="width: 260px">
                 OpenAI 兼容格式会走 /chat/completions；Anthropic 格式会走
-                /messages，并由系统自动做兼容转换。
+                /messages，并由系统自动做兼容转换；OpenSandbox Agent 会为该对话创建
+                sandbox，并连接容器内 Claude Code。
               </div>
             </template>
             <el-icon class="ml-3 cursor-pointer">

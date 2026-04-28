@@ -93,6 +93,16 @@ export class ModelsService {
     return modelKeyInfo;
   }
 
+  async getCurrentModelKeyInfoByModelName(modelName: string) {
+    if (!modelName) {
+      return null;
+    }
+
+    return this.modelsEntity.findOne({
+      where: { modelName },
+    });
+  }
+
   async getSpecialModelKeyInfo(modelPrefix) {
     // 使用Like操作符进行模糊查询
     const matchingModels = await this.modelsEntity.find({

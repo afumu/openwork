@@ -5,6 +5,7 @@ import { ChatService } from './chat.service';
 import { Body, Controller, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { ChatProcessDto } from './dto/chatProcess.dto';
+import { RuntimeStatusDto } from './dto/runtimeStatus.dto';
 import { StopChatDto } from './dto/stopChat.dto';
 
 @ApiTags('openwork')
@@ -26,6 +27,14 @@ export class ChatController {
   @ApiBearerAuth()
   chatStop(@Body() body: StopChatDto, @Req() req: Request) {
     return this.chatService.stopChat(body, req);
+  }
+
+  @Post('runtime/status')
+  @ApiOperation({ summary: '查询当前对话运行时状态' })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  runtimeStatus(@Body() body: RuntimeStatusDto, @Req() req: Request) {
+    return this.chatService.runtimeStatus(body, req);
   }
 
   @Post('tts-process')

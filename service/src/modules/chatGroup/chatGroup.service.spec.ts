@@ -61,6 +61,57 @@ describe('ChatGroupService', () => {
     expect(savedConfig.modelInfo.modelName).toBe('GPT-4o Mini');
   });
 
+  it('repairs an inherited stale model by matching the current model display name', async () => {
+    const save = jest.fn().mockResolvedValue({ id: 102 });
+    const getModelDetailByName = jest
+      .fn()
+      .mockRejectedValueOnce(new HttpException('未找到指定模型', 404));
+    const service = new ChatGroupService(
+      { save } as any,
+      { findOne: jest.fn() } as any,
+      {
+        getBaseConfig: jest.fn().mockResolvedValue({
+          modelInfo: {
+            model: 'gpt-4o-mini',
+            modelName: 'GPT-4o Mini',
+          },
+        }),
+        getCurrentModelKeyInfoByModelName: jest.fn().mockResolvedValue({
+          model: 'deepseek-v4-flash',
+          modelName: 'sandbox',
+          keyType: 1,
+          deductType: 1,
+          deduct: 1,
+          isFileUpload: 0,
+          isImageUpload: 0,
+          isNetworkSearch: 0,
+          deepThinkingType: 0,
+          isMcpTool: 0,
+          systemPrompt: '',
+          systemPromptType: 0,
+        }),
+        getModelDetailByName,
+      } as any,
+    );
+
+    await service.create(
+      {
+        appId: 0,
+        modelConfig: {
+          modelInfo: {
+            model: 'kimi-k2.5',
+            modelName: 'sandbox',
+          },
+        },
+      } as any,
+      createReq(),
+    );
+
+    const savedConfig = JSON.parse(save.mock.calls[0][0].config);
+    expect(savedConfig.modelInfo.model).toBe('deepseek-v4-flash');
+    expect(savedConfig.modelInfo.modelName).toBe('sandbox');
+  });
+
   it('throws a clear error when no usable model config exists', async () => {
     const service = new ChatGroupService(
       { save: jest.fn() } as any,

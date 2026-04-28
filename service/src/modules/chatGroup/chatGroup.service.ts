@@ -34,16 +34,14 @@ export class ChatGroupService {
       );
     }
 
-    const modelDetail = await this.modelsService.getModelDetailByName(modelConfig.modelInfo.model);
+    const modelDetail = await this.resolveCreateModelDetail(modelConfig, baseModelConfig);
     if (modelDetail) {
-      modelConfig.modelInfo.modelName = modelDetail.modelName;
-      modelConfig.modelInfo.deductType = modelDetail.deductType;
-      modelConfig.modelInfo.deduct = modelDetail.deduct;
-      modelConfig.modelInfo.isFileUpload = modelDetail.isFileUpload;
-      modelConfig.modelInfo.isImageUpload = modelDetail.isImageUpload;
-      modelConfig.modelInfo.isNetworkSearch = modelDetail.isNetworkSearch;
-      modelConfig.modelInfo.deepThinkingType = modelDetail.deepThinkingType;
-      modelConfig.modelInfo.isMcpTool = modelDetail.isMcpTool;
+      this.applyModelDetail(modelConfig.modelInfo, modelDetail);
+    } else {
+      throw new HttpException(
+        '当前对话模型已不存在，请刷新后重新选择模型！',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     if (!modelConfig?.modelInfo) {
@@ -143,6 +141,75 @@ export class ChatGroupService {
         ...(bodyModelConfig?.modelInfo || {}),
       },
     };
+  }
+
+  private async resolveCreateModelDetail(modelConfig: any, baseModelConfig: any) {
+    const requestedModel = modelConfig?.modelInfo?.model;
+    const requestedModelName = modelConfig?.modelInfo?.modelName;
+    const exactDetail = await this.findModelDetail(requestedModel);
+
+    if (exactDetail) {
+      return exactDetail;
+    }
+
+    const modelNameDetail = await this.modelsService.getCurrentModelKeyInfoByModelName?.(
+      requestedModelName,
+    );
+    if (modelNameDetail) {
+      Logger.warn(
+        `新建对话继承的模型 ${requestedModel} 已不存在，按显示名称 ${requestedModelName} 修正为 ${modelNameDetail.model}`,
+        'ChatGroupService',
+      );
+      modelConfig.modelInfo.model = modelNameDetail.model;
+      return modelNameDetail;
+    }
+
+    const baseModel = baseModelConfig?.modelInfo?.model;
+    if (baseModel && baseModel !== requestedModel) {
+      const baseDetail = await this.findModelDetail(baseModel);
+      if (baseDetail) {
+        Logger.warn(
+          `新建对话继承的模型 ${requestedModel} 已不存在，回退到默认模型 ${baseModel}`,
+          'ChatGroupService',
+        );
+        modelConfig.modelInfo = {
+          ...(baseModelConfig?.modelInfo || {}),
+        };
+        return baseDetail;
+      }
+    }
+
+    return null;
+  }
+
+  private async findModelDetail(model: string) {
+    if (!model) {
+      return null;
+    }
+
+    try {
+      return await this.modelsService.getModelDetailByName(model);
+    } catch (error) {
+      if (error instanceof HttpException && error.getStatus() === HttpStatus.NOT_FOUND) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  private applyModelDetail(modelInfo: any, modelDetail: any) {
+    modelInfo.model = modelDetail.model || modelInfo.model;
+    modelInfo.modelName = modelDetail.modelName || modelInfo.modelName;
+    modelInfo.keyType = modelDetail.keyType || modelInfo.keyType;
+    modelInfo.deductType = modelDetail.deductType;
+    modelInfo.deduct = modelDetail.deduct;
+    modelInfo.isFileUpload = modelDetail.isFileUpload;
+    modelInfo.isImageUpload = modelDetail.isImageUpload;
+    modelInfo.isNetworkSearch = modelDetail.isNetworkSearch;
+    modelInfo.deepThinkingType = modelDetail.deepThinkingType;
+    modelInfo.isMcpTool = modelDetail.isMcpTool;
+    modelInfo.systemPrompt = modelDetail.systemPrompt;
+    modelInfo.systemPromptType = modelDetail.systemPromptType;
   }
 
   async query(req: Request) {

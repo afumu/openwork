@@ -15,6 +15,9 @@ import { Request, Response } from 'express';
 import { OpenAI } from 'openai';
 import { In, Repository } from 'typeorm';
 import { OpenAIChatService } from '../aiTool/chat/chat.service';
+import { OpenSandboxAgentChatService } from '../aiTool/chat/runtime/opensandboxAgentChat.service';
+import { OpenSandboxRuntimeService } from '../aiTool/chat/runtime/opensandboxRuntime.service';
+import { shouldUseOpenSandboxAgent } from '../aiTool/chat/runtime/runtimeWorkspace';
 import { AppEntity } from '../app/app.entity';
 import { AppService } from '../app/app.service';
 import { AutoReplyService } from '../autoReply/autoReply.service';
@@ -84,6 +87,8 @@ export class ChatService {
     private readonly chatGroupService: ChatGroupService,
     private readonly modelsService: ModelsService,
     private readonly appService: AppService,
+    private readonly openSandboxAgentChatService?: OpenSandboxAgentChatService,
+    private readonly openSandboxRuntimeService?: OpenSandboxRuntimeService,
   ) {}
 
   private createTraceId(userId?: string | number, groupId?: string | number) {
@@ -117,6 +122,46 @@ export class ChatService {
     }
 
     Logger.debug(content, 'ChatService');
+  }
+
+  private async resolveCurrentModelKeyInfo(
+    requestedModel: string,
+    requestedModelName: string | undefined,
+    traceId: string,
+  ) {
+    const exactModelKey = requestedModel
+      ? await this.modelsService.getCurrentModelKeyInfo(requestedModel)
+      : null;
+    if (exactModelKey) {
+      return exactModelKey;
+    }
+
+    const modelNameKey = requestedModelName
+      ? await this.modelsService.getCurrentModelKeyInfoByModelName(requestedModelName)
+      : null;
+    if (modelNameKey) {
+      this.logTrace('warn', traceId, '请求模型已不存在，按显示名称修正为当前模型配置', {
+        requestedModel,
+        requestedModelName,
+        resolvedModel: modelNameKey.model,
+      });
+      return modelNameKey;
+    }
+
+    const baseModelConfig = await this.modelsService.getBaseConfig();
+    const baseModel = baseModelConfig?.modelInfo?.model;
+    if (baseModel && baseModel !== requestedModel) {
+      const baseModelKey = await this.modelsService.getCurrentModelKeyInfo(baseModel);
+      if (baseModelKey) {
+        this.logTrace('warn', traceId, '请求模型已不存在，回退到后台默认模型', {
+          requestedModel,
+          resolvedModel: baseModel,
+        });
+        return baseModelKey;
+      }
+    }
+
+    return null;
   }
 
   private getStreamProgressSnapshot(
@@ -217,6 +262,63 @@ export class ChatService {
       abortedRequestCount,
       sessionId,
       success: true,
+    };
+  }
+
+  async runtimeStatus(body: { groupId?: number }, req?: Request) {
+    const traceId = this.createTraceId(req?.user?.id, body?.groupId);
+
+    if (!body?.groupId) {
+      throw new HttpException('缺少对话组ID', HttpStatus.BAD_REQUEST);
+    }
+
+    if (!this.openSandboxRuntimeService) {
+      return {
+        groupId: body.groupId,
+        mode: 'opensandbox',
+        running: false,
+        status: 'unavailable',
+        userId: req?.user?.id,
+      };
+    }
+
+    let runtime;
+    try {
+      runtime = await this.openSandboxRuntimeService.getRuntimeStatus({
+        groupId: body.groupId,
+        traceId,
+        userId: req.user.id,
+      });
+    } catch (error) {
+      this.logTrace('warn', traceId, 'OpenSandbox runtime 状态查询失败', {
+        error: serializeErrorForLog(error),
+        groupId: body.groupId,
+        userId: req.user.id,
+      });
+      return {
+        error: error instanceof Error ? error.message : String(error),
+        groupId: body.groupId,
+        mode: 'opensandbox',
+        running: false,
+        status: 'error',
+        userId: req.user.id,
+      };
+    }
+
+    if (!runtime) {
+      return {
+        groupId: body.groupId,
+        mode: 'opensandbox',
+        running: false,
+        status: 'not_created',
+        userId: req.user.id,
+      };
+    }
+
+    return {
+      ...runtime,
+      containerName: runtime.sandboxId,
+      running: runtime.status === 'Running',
     };
   }
 
@@ -505,16 +607,38 @@ export class ChatService {
       appName = name;
       if (isGPTs) {
         currentRequestModelKey = await this.modelsService.getCurrentModelKeyInfo('gpts');
+        if (!currentRequestModelKey) {
+          throw new HttpException(
+            '当前 GPTs 模型配置不存在，请联系管理员检查模型配置！',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
         currentRequestModelKey.model = `gpt-4-gizmo-${gizmoID}`;
       } else if (!isGPTs && isFixedModel && appModel) {
         appInfo.preset && (setSystemMessage = appInfo.preset);
-        currentRequestModelKey = await this.modelsService.getCurrentModelKeyInfo(appModel);
+        currentRequestModelKey = await this.resolveCurrentModelKeyInfo(
+          appModel,
+          undefined,
+          traceId,
+        );
+        if (!currentRequestModelKey) {
+          throw new HttpException(
+            `当前应用固定模型 ${appModel} 已不存在，请联系管理员检查应用配置！`,
+            HttpStatus.BAD_REQUEST,
+          );
+        }
         currentRequestModelKey.model = appModel;
         Logger.debug(`使用固定模型和应用预设`, 'ChatService');
       } else {
         // 使用应用预设
         appInfo.preset && (setSystemMessage = appInfo.preset);
-        currentRequestModelKey = await this.modelsService.getCurrentModelKeyInfo(model);
+        currentRequestModelKey = await this.resolveCurrentModelKeyInfo(model, modelName, traceId);
+        if (!currentRequestModelKey) {
+          throw new HttpException(
+            `当前模型 ${model || modelName || ''} 已不存在，请刷新后重新选择模型！`,
+            HttpStatus.BAD_REQUEST,
+          );
+        }
         Logger.debug(`使用应用预设模式`, 'ChatService');
       }
     } else {
@@ -607,7 +731,13 @@ export class ChatService {
 - 无论用户提任何问题，收到用户的问题后，立即按照上述规范生成高质量Mermaid代码，无需任何确认或询问。"
 }
           `;
-        currentRequestModelKey = await this.modelsService.getCurrentModelKeyInfo(model);
+        currentRequestModelKey = await this.resolveCurrentModelKeyInfo(model, modelName, traceId);
+        if (!currentRequestModelKey) {
+          throw new HttpException(
+            `当前模型 ${model || modelName || ''} 已不存在，请刷新后重新选择模型！`,
+            HttpStatus.BAD_REQUEST,
+          );
+        }
         Logger.debug(`使用流程图插件`, 'ChatService');
       } else {
         // 使用全局预设
@@ -624,7 +754,14 @@ export class ChatService {
 
         const currentDate = new Intl.DateTimeFormat('zh-CN', options).format(now);
 
-        currentRequestModelKey = await this.modelsService.getCurrentModelKeyInfo(model);
+        currentRequestModelKey = await this.resolveCurrentModelKeyInfo(model, modelName, traceId);
+
+        if (!currentRequestModelKey) {
+          throw new HttpException(
+            `当前模型 ${model || modelName || ''} 已不存在，请刷新后重新选择模型！`,
+            HttpStatus.BAD_REQUEST,
+          );
+        }
 
         if (currentRequestModelKey.systemPromptType === 1) {
           setSystemMessage =
@@ -643,13 +780,23 @@ export class ChatService {
 
     if (!currentRequestModelKey) {
       Logger.debug('未找到当前模型key，切换至全局模型', 'ChatService');
-      currentRequestModelKey = await this.modelsService.getCurrentModelKeyInfo(openaiBaseModel);
+      currentRequestModelKey = await this.resolveCurrentModelKeyInfo(
+        openaiBaseModel,
+        undefined,
+        traceId,
+      );
+      if (!currentRequestModelKey) {
+        throw new HttpException(
+          '当前没有可用模型配置，请联系管理员检查后台模型配置！',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
       const groupInfo = await this.chatGroupService.getGroupInfoFromId(groupId);
 
       // 假设 groupInfo.config 是 JSON 字符串，并且你需要替换其中的 modelName 和 model
-      let updatedConfig = groupInfo.config;
+      let updatedConfig = groupInfo?.config;
       try {
-        const parsedConfig = JSON.parse(groupInfo.config);
+        const parsedConfig = JSON.parse(groupInfo?.config || '{}');
         if (parsedConfig.modelInfo) {
           parsedConfig.modelInfo.modelName = currentRequestModelKey.modelName; // 替换为你需要的模型名称
           parsedConfig.modelInfo.model = currentRequestModelKey.model; // 替换为你需要的模型
@@ -1015,143 +1162,172 @@ export class ChatService {
 
           /* 普通对话 */
           const downstreamStartedAt = Date.now();
-          response = await this.openAIChatService.chat(messagesHistory, {
-            chatId: assistantLogId,
-            groupId,
-            userId: req.user.id,
-            extraParam,
-            deepThinkingType,
-            max_tokens: max_tokens,
-            apiKey: modelKey,
-            model: useModel,
-            modelName: useModeName,
-            temperature,
-            isImageUpload,
-            prompt,
-            imageUrl,
-            isFileUpload,
-            fileUrl,
-            usingNetwork,
-            timeout: modelTimeout,
-            proxyUrl: proxyResUrl,
-            modelAvatar: modelAvatar,
-            usingDeepThinking: usingDeepThinking,
-            researchMode,
-            usingMcpTool: usingMcpTool,
-            isMcpTool: isMcpTool,
-            onProgress: chat => {
-              const now = Date.now();
-              const contentText = Array.isArray(chat?.content)
-                ? chat.content.map((item: any) => item?.text || '').join('')
-                : '';
-              const reasoningText = Array.isArray(chat?.reasoning_content)
-                ? chat.reasoning_content.map((item: any) => item?.text || '').join('')
-                : '';
-              const chatPayload = chat as any;
+          const handleChatProgress = chat => {
+            const now = Date.now();
+            const contentText = Array.isArray(chat?.content)
+              ? chat.content.map((item: any) => item?.text || '').join('')
+              : '';
+            const reasoningText = Array.isArray(chat?.reasoning_content)
+              ? chat.reasoning_content.map((item: any) => item?.text || '').join('')
+              : '';
+            const chatPayload = chat as any;
 
-              streamProgress.progressEventCount += 1;
-              if (contentText) {
-                streamProgress.contentChunkCount += 1;
-                streamProgress.contentChars += contentText.length;
-                partialAssistantContent += contentText;
-                streamSegmentCollector.appendText(contentText);
-              }
-              if (reasoningText) {
-                streamProgress.reasoningChunkCount += 1;
-                streamProgress.reasoningChars += reasoningText.length;
-                partialAssistantReasoning += reasoningText;
-              }
-              if (chat?.tool_calls) {
-                streamProgress.toolCallChunkCount += 1;
-                partialToolCalls = chat.tool_calls;
-              }
-              if (chat?.tool_execution) {
-                streamProgress.toolExecutionChunkCount += 1;
-                partialToolExecution = chat.tool_execution;
-              }
-              if (chat?.tool_execution_delta) {
-                streamProgress.toolExecutionChunkCount += 1;
-                streamSegmentCollector.upsertToolExecution(chat.tool_execution_delta);
-                partialToolExecution = streamSegmentCollector.serializeToolExecutions();
-              }
-              if (chat?.networkSearchResult) {
-                partialNetworkSearchResult = chat.networkSearchResult;
-              }
-              if (chatPayload?.fileVectorResult) {
-                partialFileVectorResult = chatPayload.fileVectorResult;
-              }
-              if (!streamProgress.firstProgressAt) {
-                streamProgress.firstProgressAt = now;
-                this.logTrace('debug', traceId, '收到首个流式片段', {
-                  assistantLogId,
-                  contentLength: contentText.length,
-                  downstreamDelayMs: now - downstreamStartedAt,
-                  hasReasoning: Boolean(reasoningText),
-                  hasToolCalls: Boolean(chat?.tool_calls),
-                  hasToolExecution: Boolean(chat?.tool_execution),
-                });
-              }
-              streamProgress.lastProgressAt = now;
-
-              if (
-                shouldLogProgressHeartbeat(
-                  streamProgress.progressEventCount,
-                  streamProgress.lastProgressLogAt,
-                  now,
-                )
-              ) {
-                streamProgress.lastProgressLogAt = now;
-                this.logTrace('debug', traceId, '流式响应心跳', {
-                  assistantLogId,
-                  durationMs: now - requestStartedAt,
-                  streamProgress: this.getStreamProgressSnapshot(
-                    streamProgress,
-                    now,
-                    requestStartedAt,
-                  ),
-                });
-              }
-
-              void persistPartialAssistantLog(false);
-              res.write(`\n${JSON.stringify(chat)}`);
-            },
-            onFailure: async data => {
-              this.logTrace('error', traceId, '下游聊天服务返回失败回调', {
+            streamProgress.progressEventCount += 1;
+            if (contentText) {
+              streamProgress.contentChunkCount += 1;
+              streamProgress.contentChars += contentText.length;
+              partialAssistantContent += contentText;
+              streamSegmentCollector.appendText(contentText);
+            }
+            if (reasoningText) {
+              streamProgress.reasoningChunkCount += 1;
+              streamProgress.reasoningChars += reasoningText.length;
+              partialAssistantReasoning += reasoningText;
+            }
+            if (chat?.tool_calls) {
+              streamProgress.toolCallChunkCount += 1;
+              partialToolCalls = chat.tool_calls;
+            }
+            if (chat?.tool_execution) {
+              streamProgress.toolExecutionChunkCount += 1;
+              partialToolExecution = chat.tool_execution;
+            }
+            if (chat?.tool_execution_delta) {
+              streamProgress.toolExecutionChunkCount += 1;
+              streamSegmentCollector.upsertToolExecution(chat.tool_execution_delta);
+              partialToolExecution = streamSegmentCollector.serializeToolExecutions();
+            }
+            if (chat?.networkSearchResult) {
+              partialNetworkSearchResult = chat.networkSearchResult;
+            }
+            if (chatPayload?.fileVectorResult) {
+              partialFileVectorResult = chatPayload.fileVectorResult;
+            }
+            if (!streamProgress.firstProgressAt) {
+              streamProgress.firstProgressAt = now;
+              this.logTrace('debug', traceId, '收到首个流式片段', {
                 assistantLogId,
-                data: serializeErrorForLog(data),
-                durationMs: Date.now() - requestStartedAt,
+                contentLength: contentText.length,
+                downstreamDelayMs: now - downstreamStartedAt,
+                hasReasoning: Boolean(reasoningText),
+                hasToolCalls: Boolean(chat?.tool_calls),
+                hasToolExecution: Boolean(chat?.tool_execution),
               });
-              partialAssistantContent = String(data?.full_content || partialAssistantContent || '');
-              partialAssistantReasoning = String(
-                data?.full_reasoning_content || partialAssistantReasoning || '',
-              );
-              partialToolCalls = data?.tool_calls || partialToolCalls;
-              partialToolExecution = data?.tool_execution || partialToolExecution;
-              partialNetworkSearchResult = data?.networkSearchResult || partialNetworkSearchResult;
-              partialFileVectorResult = data?.fileVectorResult || partialFileVectorResult;
-              appendInterruptedSegment(streamSegmentCollector);
-              await persistPartialAssistantLog(true);
+            }
+            streamProgress.lastProgressAt = now;
+
+            if (
+              shouldLogProgressHeartbeat(
+                streamProgress.progressEventCount,
+                streamProgress.lastProgressLogAt,
+                now,
+              )
+            ) {
+              streamProgress.lastProgressLogAt = now;
+              this.logTrace('debug', traceId, '流式响应心跳', {
+                assistantLogId,
+                durationMs: now - requestStartedAt,
+                streamProgress: this.getStreamProgressSnapshot(
+                  streamProgress,
+                  now,
+                  requestStartedAt,
+                ),
+              });
+            }
+
+            void persistPartialAssistantLog(false);
+            res.write(`\n${JSON.stringify(chat)}`);
+          };
+          const handleChatFailure = async data => {
+            this.logTrace('error', traceId, '下游聊天服务返回失败回调', {
+              assistantLogId,
+              data: serializeErrorForLog(data),
+              durationMs: Date.now() - requestStartedAt,
+            });
+            partialAssistantContent = String(data?.full_content || partialAssistantContent || '');
+            partialAssistantReasoning = String(
+              data?.full_reasoning_content || partialAssistantReasoning || '',
+            );
+            partialToolCalls = data?.tool_calls || partialToolCalls;
+            partialToolExecution = data?.tool_execution || partialToolExecution;
+            partialNetworkSearchResult = data?.networkSearchResult || partialNetworkSearchResult;
+            partialFileVectorResult = data?.fileVectorResult || partialFileVectorResult;
+            appendInterruptedSegment(streamSegmentCollector);
+            await persistPartialAssistantLog(true);
+            await this.chatLogService.updateChatLog(assistantLogId, {
+              ...buildAssistantFailureLogUpdate(data),
+              stream_segments: streamSegmentCollector.serialize(),
+            });
+          };
+          const handleChatDatabase = async data => {
+            // 保存数据到数据库
+            if (data.networkSearchResult) {
               await this.chatLogService.updateChatLog(assistantLogId, {
-                ...buildAssistantFailureLogUpdate(data),
-                stream_segments: streamSegmentCollector.serialize(),
+                networkSearchResult: data.networkSearchResult,
               });
-            },
-            onDatabase: async data => {
-              // 保存数据到数据库
-              if (data.networkSearchResult) {
-                await this.chatLogService.updateChatLog(assistantLogId, {
-                  networkSearchResult: data.networkSearchResult,
-                });
-              }
-              if (data.fileVectorResult) {
-                await this.chatLogService.updateChatLog(assistantLogId, {
-                  fileVectorResult: data.fileVectorResult,
-                });
-              }
-            },
-            abortController,
-            traceId,
-          });
+            }
+            if (data.fileVectorResult) {
+              await this.chatLogService.updateChatLog(assistantLogId, {
+                fileVectorResult: data.fileVectorResult,
+              });
+            }
+          };
+
+          if (shouldUseOpenSandboxAgent(currentRequestModelKey, useModel)) {
+            if (!this.openSandboxAgentChatService) {
+              throw new HttpException(
+                'OpenSandbox agent 服务未初始化',
+                HttpStatus.SERVICE_UNAVAILABLE,
+              );
+            }
+
+            response = await this.openSandboxAgentChatService.chat({
+              abortController,
+              apiKey: undefined,
+              chatId: assistantLogId,
+              groupId,
+              model: useModel,
+              modelAvatar: modelAvatar,
+              modelName: useModeName,
+              onFailure: handleChatFailure,
+              onProgress: handleChatProgress,
+              prompt,
+              proxyUrl: proxyUrl || undefined,
+              traceId,
+              userId: req.user.id,
+            });
+          } else {
+            response = await this.openAIChatService.chat(messagesHistory, {
+              chatId: assistantLogId,
+              groupId,
+              userId: req.user.id,
+              extraParam,
+              deepThinkingType,
+              max_tokens: max_tokens,
+              apiKey: modelKey,
+              model: useModel,
+              modelName: useModeName,
+              temperature,
+              isImageUpload,
+              prompt,
+              imageUrl,
+              isFileUpload,
+              fileUrl,
+              usingNetwork,
+              timeout: modelTimeout,
+              proxyUrl: proxyResUrl,
+              modelAvatar: modelAvatar,
+              usingDeepThinking: usingDeepThinking,
+              researchMode,
+              usingMcpTool: usingMcpTool,
+              isMcpTool: isMcpTool,
+              onProgress: handleChatProgress,
+              onFailure: handleChatFailure,
+              onDatabase: handleChatDatabase,
+              abortController,
+              traceId,
+            });
+          }
 
           Logger.debug(
             `response summary: ${JSON.stringify({
