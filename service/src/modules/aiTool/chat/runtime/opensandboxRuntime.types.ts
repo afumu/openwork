@@ -31,10 +31,11 @@ export type OpenSandboxRuntimeConfig = {
 };
 
 export type EnsureRuntimeInput = {
-  anthropicApiKey?: string;
-  anthropicBaseUrl?: string;
-  anthropicModel?: string;
+  apiBaseUrl?: string;
+  apiFormat?: string;
+  apiKey?: string;
   groupId: number | string;
+  model?: string;
   traceId?: string;
   userId: number;
 };

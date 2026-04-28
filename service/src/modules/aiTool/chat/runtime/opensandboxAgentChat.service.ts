@@ -11,6 +11,7 @@ import type {
 
 type AgentChatInput = {
   agent?: BridgeAgent;
+  apiFormat?: string;
   apiKey?: string;
   chatId: number | string;
   groupId: number | string;
@@ -165,10 +166,11 @@ export class OpenSandboxAgentChatService {
 
     try {
       const descriptor = await this.runtimeService.ensureRuntime({
-        anthropicApiKey: input.apiKey,
-        anthropicBaseUrl: input.proxyUrl,
-        anthropicModel: input.model && input.model !== 'claude_code' ? input.model : undefined,
+        apiBaseUrl: input.proxyUrl,
+        apiFormat: input.apiFormat,
+        apiKey: input.apiKey,
         groupId: input.groupId,
+        model: input.model && input.model !== 'claude_code' ? input.model : undefined,
         traceId: input.traceId,
         userId: input.userId,
       });

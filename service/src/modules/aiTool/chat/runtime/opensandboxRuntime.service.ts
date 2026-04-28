@@ -36,6 +36,45 @@ function buildEnvSignature(env: Record<string, string>) {
   return createHash('sha256').update(JSON.stringify(env)).digest('hex');
 }
 
+function normalizeModelApiFormat(apiFormat?: string) {
+  const normalized = String(apiFormat || 'openai')
+    .trim()
+    .toLowerCase();
+
+  if (normalized === 'anthropic' || normalized === 'opensandbox') return 'anthropic';
+  return 'openai';
+}
+
+function buildModelRuntimeEnv(input: EnsureRuntimeInput) {
+  const apiFormat = normalizeModelApiFormat(input.apiFormat);
+  const baseEnv = sanitizeEnv({
+    OPENWORK_MODEL_API_FORMAT: apiFormat,
+    OPENWORK_MODEL_API_KEY: input.apiKey,
+    OPENWORK_MODEL_BASE_URL: input.apiBaseUrl,
+    OPENWORK_MODEL_NAME: input.model,
+  });
+
+  if (apiFormat === 'anthropic') {
+    return {
+      ...baseEnv,
+      ...sanitizeEnv({
+        ANTHROPIC_AUTH_TOKEN: input.apiKey,
+        ANTHROPIC_BASE_URL: input.apiBaseUrl,
+        ANTHROPIC_MODEL: input.model,
+      }),
+    };
+  }
+
+  return {
+    ...baseEnv,
+    ...sanitizeEnv({
+      OPENAI_API_KEY: input.apiKey,
+      OPENAI_BASE_URL: input.apiBaseUrl,
+      OPENAI_MODEL: input.model,
+    }),
+  };
+}
+
 @Injectable()
 export class OpenSandboxRuntimeService {
   private readonly logger = new Logger(OpenSandboxRuntimeService.name);
@@ -58,17 +97,12 @@ export class OpenSandboxRuntimeService {
       workspaceRoot: config.workspaceRoot,
     });
     const existing = await this.client.findSandboxByMetadata(metadata);
+    const modelEnv = buildModelRuntimeEnv(input);
     const sandbox = existing
       ? await this.client.connectSandbox(existing.id)
       : await this.client.createSandbox({
           env: sanitizeEnv({
-            ANTHROPIC_AUTH_TOKEN: input.anthropicApiKey || process.env.ANTHROPIC_AUTH_TOKEN,
-            ANTHROPIC_BASE_URL: input.anthropicBaseUrl || process.env.ANTHROPIC_BASE_URL,
-            ANTHROPIC_DEFAULT_HAIKU_MODEL: process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL,
-            ANTHROPIC_DEFAULT_OPUS_MODEL: process.env.ANTHROPIC_DEFAULT_OPUS_MODEL,
-            ANTHROPIC_DEFAULT_SONNET_MODEL: process.env.ANTHROPIC_DEFAULT_SONNET_MODEL,
-            ANTHROPIC_MODEL: input.anthropicModel || process.env.ANTHROPIC_MODEL,
-            ANTHROPIC_REASONING_MODEL: process.env.ANTHROPIC_REASONING_MODEL,
+            ...modelEnv,
             CLAUDE_ALLOWED_TOOLS:
               process.env.CLAUDE_ALLOWED_TOOLS || 'Bash,Read,Write,Edit,Glob,Grep,LS',
             CLAUDE_BRIDGE_CWD: workspace.workspacePath,
@@ -168,14 +202,9 @@ export class OpenSandboxRuntimeService {
     const logFile = '/tmp/openwork-agent-bridge.log';
     const signatureFile = '/tmp/openwork-agent-bridge.env.sha256';
     const healthUrl = `http://127.0.0.1:${config.bridgePort}/health`;
+    const modelEnv = buildModelRuntimeEnv(input);
     const bridgeEnv = sanitizeEnv({
-      ANTHROPIC_AUTH_TOKEN: input.anthropicApiKey || process.env.ANTHROPIC_AUTH_TOKEN,
-      ANTHROPIC_BASE_URL: input.anthropicBaseUrl || process.env.ANTHROPIC_BASE_URL,
-      ANTHROPIC_DEFAULT_HAIKU_MODEL: process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL,
-      ANTHROPIC_DEFAULT_OPUS_MODEL: process.env.ANTHROPIC_DEFAULT_OPUS_MODEL,
-      ANTHROPIC_DEFAULT_SONNET_MODEL: process.env.ANTHROPIC_DEFAULT_SONNET_MODEL,
-      ANTHROPIC_MODEL: input.anthropicModel || process.env.ANTHROPIC_MODEL,
-      ANTHROPIC_REASONING_MODEL: process.env.ANTHROPIC_REASONING_MODEL,
+      ...modelEnv,
       CLAUDE_ALLOWED_TOOLS: process.env.CLAUDE_ALLOWED_TOOLS || 'Bash,Read,Write,Edit,Glob,Grep,LS',
       CLAUDE_BRIDGE_CWD: workspacePath,
       CLAUDE_BRIDGE_PORT: String(config.bridgePort),

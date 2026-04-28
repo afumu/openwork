@@ -35,6 +35,6 @@ chat 前端
 
 ### 4. OpenSandbox 是当前运行时方向
 
-运行时容器和 agent 对话开始接入 OpenSandbox。`service` 已具备按 `userId + groupId` 创建或复用 sandbox、连接容器内 bridge、把 Claude Code 事件流写回聊天流的基础能力。
+运行时容器和 agent 对话开始接入 OpenSandbox。普通聊天模型由 `service` 按 `userId + groupId` 创建或复用 sandbox、连接容器内 bridge、把 Claude Code 事件流写回聊天流。模型密钥、模型名、代理地址和接口格式来自后台模型配置，并在创建或启动 bridge 时注入容器；不再从 `service` 环境变量读取模型侧密钥或模型名。
 
 命令执行、文件读写和更完整的 agent 事件协议仍按 [OpenSandbox 运行时改造方案](./opensandbox-runtime-plan.md) 继续推进。

@@ -825,6 +825,7 @@ export class ChatService {
       tokenFeeRatio,
       deductType,
       key,
+      apiFormat,
       id: keyId,
       maxRounds,
       proxyUrl,
@@ -1283,7 +1284,8 @@ export class ChatService {
 
             response = await this.openSandboxAgentChatService.chat({
               abortController,
-              apiKey: undefined,
+              apiFormat: apiFormat || 'openai',
+              apiKey: key || undefined,
               chatId: assistantLogId,
               groupId,
               model: useModel,

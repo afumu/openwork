@@ -33,12 +33,10 @@ export function buildRuntimeMetadata(input: { groupId: number | string; userId: 
 }
 
 export function shouldUseOpenSandboxAgent(modelConfig: any, requestedModel?: string) {
-  const apiFormat = String(modelConfig?.apiFormat || '')
-    .trim()
-    .toLowerCase();
+  const keyType = Number(modelConfig?.keyType ?? 1);
   const model = String(requestedModel || modelConfig?.model || '')
     .trim()
     .toLowerCase();
 
-  return apiFormat === 'opensandbox' || OPEN_SANDBOX_AGENT_MODELS.has(model);
+  return keyType === 1 || OPEN_SANDBOX_AGENT_MODELS.has(model);
 }

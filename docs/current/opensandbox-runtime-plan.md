@@ -5,8 +5,9 @@
 ## 当前基线
 
 - 旧的内置运行时工作区、Docker 容器管理、运行时状态接口和运行时打包流程已移除。
-- 常规聊天先走 `service -> 模型供应商 API`。
-- OpenSandbox agent 模型已开始接入：用户发起聊天时，`service` 可按 `userId + groupId` 创建或复用 sandbox，并通过容器内 bridge 与 Claude Code 对话。
+- 普通聊天模型已开始走 `service -> OpenSandbox -> openwork-agent-bridge`。
+- 用户发起聊天时，`service` 可按 `userId + groupId` 创建或复用 sandbox，并通过容器内 bridge 与 Claude Code 对话。
+- 模型密钥、模型名、代理地址和接口格式来自后台模型配置。`service` 不再从环境变量读取模型侧密钥或模型名。
 - `chat/` 中的文件面板、工具执行展示、终端面板等交互暂时保留，后续接 OpenSandbox 时复用。
 - 聊天记录与历史工具轨迹字段保留，用于兼容既有记录展示。
 
@@ -80,7 +81,7 @@ service/src/modules/aiTool/chat/runtime/
 - 按 `userId + groupId` 定位 sandbox。
 - 没有 sandbox 时创建新的 `openwork-agent-runtime` sandbox。
 - 创建时写入 metadata：`userId`、`groupId`、`runtimeKind=openwork-agent`。
-- 注入内部模型配置、搜索桥接、workspace root 等基础配置。
+- 注入后台模型配置、搜索桥接、workspace root 等基础配置。
 - 获取 bridge 端口 endpoint，例如 `8787`。
 - 在请求 bridge 时携带 OpenSandbox endpoint 返回的 headers。
 - 返回统一 runtime descriptor。
@@ -219,6 +220,12 @@ OPENWORK_SANDBOX_TIMEOUT_SECONDS=3600
 OPENWORK_SANDBOX_CPU=2
 OPENWORK_SANDBOX_MEMORY=4Gi
 ```
+
+模型侧配置不放在 `service` 环境变量中。后台模型配置里的密钥、模型名、代理地址和接口格式会传入 sandbox：
+
+- `apiFormat=openai`：注入 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL`，同时注入通用 `OPENWORK_MODEL_*`。
+- `apiFormat=anthropic`：注入 `ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_BASE_URL`、`ANTHROPIC_MODEL`，同时注入通用 `OPENWORK_MODEL_*`。
+- 旧的 `apiFormat=opensandbox` 配置按 `anthropic` 兼容处理，不再作为后台可选项展示。
 
 ## 实施阶段
 

@@ -25,9 +25,12 @@ describe('OpenSandbox runtime workspace helpers', () => {
     });
   });
 
-  it('routes only explicit OpenSandbox agent models through the runtime', () => {
-    expect(shouldUseOpenSandboxAgent({ apiFormat: 'opensandbox' }, 'gpt-4o')).toBe(true);
+  it('routes normal chat models through the runtime regardless of provider format', () => {
+    expect(shouldUseOpenSandboxAgent({ apiFormat: 'openai', keyType: 1 }, 'gpt-4o')).toBe(true);
+    expect(shouldUseOpenSandboxAgent({ apiFormat: 'anthropic', keyType: 1 }, 'claude-3-5')).toBe(
+      true,
+    );
     expect(shouldUseOpenSandboxAgent({ apiFormat: 'openai' }, 'claude_code')).toBe(true);
-    expect(shouldUseOpenSandboxAgent({ apiFormat: 'openai' }, 'gpt-4o')).toBe(false);
+    expect(shouldUseOpenSandboxAgent({ apiFormat: 'openai', keyType: 2 }, 'dall-e-3')).toBe(false);
   });
 });
