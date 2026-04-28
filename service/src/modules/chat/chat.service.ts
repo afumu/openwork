@@ -1184,6 +1184,7 @@ export class ChatService {
               streamProgress.reasoningChunkCount += 1;
               streamProgress.reasoningChars += reasoningText.length;
               partialAssistantReasoning += reasoningText;
+              streamSegmentCollector.appendReasoning(reasoningText);
             }
             if (chat?.tool_calls) {
               streamProgress.toolCallChunkCount += 1;

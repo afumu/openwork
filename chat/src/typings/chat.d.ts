@@ -52,7 +52,9 @@ declare namespace Chat {
       progress?: number
       args_complete?: boolean
       args_preview?: string
+      input?: unknown
       is_error?: boolean
+      result?: unknown
       result_preview?: string
     }
     stream_segments?: string

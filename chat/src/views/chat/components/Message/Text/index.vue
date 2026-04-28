@@ -34,6 +34,7 @@ import 'highlight.js/styles/atom-one-light.css' // 更现代的浅色主题
 import MarkdownIt from 'markdown-it'
 import mila from 'markdown-it-link-attributes'
 import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import ToolExecutionRenderer from '../ToolExecutionRenderer.vue'
 
 // 注册mermaid语言到highlight.js
 hljs.registerLanguage('mermaid', () => ({
@@ -128,7 +129,9 @@ interface ToolExecutionItem {
   progress?: number
   args_complete?: boolean
   args_preview?: string
+  input?: unknown
   is_error?: boolean
+  result?: unknown
   result_preview?: string
 }
 
@@ -138,12 +141,21 @@ interface TextAssistantStreamSegment {
   text: string
 }
 
+interface ReasoningAssistantStreamSegment {
+  id: string
+  type: 'reasoning'
+  text: string
+}
+
 interface ToolExecutionAssistantStreamSegment extends ToolExecutionItem {
   id: string
   type: 'tool_execution'
 }
 
-type AssistantStreamSegment = TextAssistantStreamSegment | ToolExecutionAssistantStreamSegment
+type AssistantStreamSegment =
+  | TextAssistantStreamSegment
+  | ReasoningAssistantStreamSegment
+  | ToolExecutionAssistantStreamSegment
 
 interface TtsResponse {
   ttsUrl: string
@@ -641,6 +653,7 @@ const parsedStreamSegments = computed<AssistantStreamSegment[]>(() => {
     return parsed.filter(item => {
       if (!item || typeof item !== 'object') return false
       if (item.type === 'text') return typeof item.text === 'string'
+      if (item.type === 'reasoning') return typeof item.text === 'string'
       return item.type === 'tool_execution'
     }) as AssistantStreamSegment[]
   } catch (error) {
@@ -649,6 +662,9 @@ const parsedStreamSegments = computed<AssistantStreamSegment[]>(() => {
 })
 
 const hasOrderedStreamSegments = computed(() => parsedStreamSegments.value.length > 0)
+const hasOrderedReasoningSegments = computed(() =>
+  parsedStreamSegments.value.some(segment => segment.type === 'reasoning')
+)
 
 function artifactTypeLabel(file?: ArtifactFileSummary | null) {
   if (!file) return '文件'
@@ -724,24 +740,6 @@ function renderArtifactMarkdownPreview(file?: ArtifactFileSummary | null) {
   return renderAssistantMarkdown(normalizeArtifactMarkdownPreview(file))
 }
 
-const toolNameMap: Record<string, string> = {
-  bash: '执行命令',
-  edit: '编辑文件',
-  fetch: '抓取页面',
-  find: '查找内容',
-  glob: '查找文件',
-  grep: '搜索文本',
-  list_dir: '查看目录',
-  ls: '查看目录',
-  multi_tool_use: '并行处理',
-  open: '打开页面',
-  read: '读取文件',
-  replace: '替换内容',
-  search: '联网搜索',
-  web_search: '联网搜索',
-  write: '写入文件',
-}
-
 const toolExecutionSummary = computed(() => {
   if (!parsedToolExecution.value.length) return ''
   const workflowCount = parsedToolExecution.value.filter(
@@ -755,435 +753,6 @@ const toolExecutionSummary = computed(() => {
   if (activeCount > 0) return `工具执行中 (${activeCount})`
   return `工具执行 (${parsedToolExecution.value.length})`
 })
-
-function getLocalizedToolName(toolName?: string) {
-  if (!toolName) return '工具调用'
-  return toolNameMap[toolName] || toolName.replace(/[_-]/g, ' ')
-}
-
-function truncateDisplayText(value?: string, maxLength = 56) {
-  if (!value) return ''
-  const normalized = value.replace(/\s+/g, ' ').trim()
-  if (normalized.length <= maxLength) return normalized
-  return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`
-}
-
-function extractJsonStringValue(text: string | undefined, keys: string[]) {
-  if (!text) return ''
-
-  for (const key of keys) {
-    const regex = new RegExp(`"${key}"\\s*:\\s*"([^"]+)"`, 'i')
-    const matched = text.match(regex)
-    if (matched?.[1]) {
-      return matched[1]
-    }
-  }
-
-  return ''
-}
-
-function extractPathCandidate(...values: Array<string | undefined>) {
-  const fileNameRegex =
-    /(?:^|[\s"'`])([A-Za-z0-9._/-]+\.(?:md|markdown|txt|html|js|jsx|ts|tsx|json|py|sh|yaml|yml|css|scss|less|vue|xml|csv|pdf|png|jpg|jpeg|webp|gif))/i
-
-  for (const value of values) {
-    if (!value) continue
-
-    const jsonPath =
-      extractJsonStringValue(value, [
-        'path',
-        'file_path',
-        'filePath',
-        'filename',
-        'output',
-        'target',
-      ]) || ''
-    if (jsonPath) return jsonPath
-
-    const pathMatch = value.match(/(?:\/|\.\/|\.\.\/)[^\s"'`,)]+/g)
-    if (pathMatch?.length) {
-      const matchedPath = pathMatch.find(item => /\.[A-Za-z0-9]+$/.test(item)) || pathMatch[0]
-      if (matchedPath) return matchedPath
-    }
-
-    const fileNameMatch = value.match(fileNameRegex)
-    if (fileNameMatch?.[1]) {
-      return fileNameMatch[1]
-    }
-  }
-
-  return ''
-}
-
-function extractUrlCandidate(...values: Array<string | undefined>) {
-  for (const value of values) {
-    if (!value) continue
-
-    const jsonUrl = extractJsonStringValue(value, ['url', 'link', 'href'])
-    if (jsonUrl) return jsonUrl
-
-    const urlMatch = value.match(/https?:\/\/[^\s"'`,)]+/i)
-    if (urlMatch?.[0]) return urlMatch[0]
-  }
-
-  return ''
-}
-
-function extractCommandCandidate(...values: Array<string | undefined>) {
-  for (const value of values) {
-    if (!value) continue
-
-    const jsonCommand = extractJsonStringValue(value, ['command', 'cmd'])
-    if (jsonCommand) return jsonCommand
-
-    const commandMatch = value.match(
-      /(?:^|[\s"'`])((?:pnpm|npm|yarn|bun|node|python|python3|pytest|git|rg|grep|find|ls|cat|sed|bash|sh)\b[^\n]*)/i
-    )
-    if (commandMatch?.[1]) {
-      return commandMatch[1].trim()
-    }
-  }
-
-  return ''
-}
-
-function extractSearchQuery(...values: Array<string | undefined>) {
-  for (const value of values) {
-    if (!value) continue
-
-    const jsonQuery =
-      extractJsonStringValue(value, ['query', 'q', 'pattern', 'keyword', 'keywords', 'search']) ||
-      ''
-    if (jsonQuery) return jsonQuery
-
-    const quotedMatch = value.match(/"([^"]{2,80})"/)
-    if (quotedMatch?.[1]) {
-      return quotedMatch[1]
-    }
-  }
-
-  return ''
-}
-
-function formatToolPathLabel(path?: string) {
-  if (!path) return ''
-  const cleaned = path.split('?')[0].replace(/[)"'`,]+$/, '')
-  const segments = cleaned.split('/').filter(Boolean)
-  if (!segments.length) return cleaned
-  return segments[segments.length - 1] || cleaned
-}
-
-function formatToolFriendlyLabel(value?: string) {
-  if (!value) return ''
-  const fileName = formatToolPathLabel(value)
-  const withoutExtension = fileName.replace(/\.[^.]+$/, '')
-  return truncateDisplayText(withoutExtension.replace(/[_-]+/g, ' ').trim(), 26)
-}
-
-function formatHostLabel(url?: string) {
-  if (!url) return ''
-  try {
-    return new URL(url).hostname.replace(/^www\./, '')
-  } catch (_error) {
-    return truncateDisplayText(url, 32)
-  }
-}
-
-function getToolActionPrefix(item: {
-  event: 'start' | 'update' | 'end'
-  phase?: 'assembling' | 'executing' | 'completed'
-  is_error?: boolean
-}) {
-  if (item.is_error) return '未能'
-  if (item.phase === 'assembling') return '正在准备'
-  if (isToolExecutionActive(item)) return '正在'
-  return '已'
-}
-
-function buildToolActionText(
-  item: {
-    event: 'start' | 'update' | 'end'
-    phase?: 'assembling' | 'executing' | 'completed'
-    is_error?: boolean
-  },
-  action: string
-) {
-  return `${getToolActionPrefix(item)}${action}`
-}
-
-function summarizeCommandAction(command?: string) {
-  const normalized = command?.replace(/\s+/g, ' ').trim() || ''
-  if (!normalized) {
-    return {
-      action: '执行命令',
-      subtitle: '调用命令行工具推进当前任务',
-      target: '',
-    }
-  }
-
-  if (/\b(pnpm|npm|yarn|bun)\b.*\b(test|vitest|jest)\b|\bpytest\b/i.test(normalized)) {
-    return {
-      action: '运行测试',
-      subtitle: '验证当前修改是否正常工作',
-      target: truncateDisplayText(normalized, 34),
-    }
-  }
-
-  if (/\b(pnpm|npm|yarn|bun)\b.*\b(build|vite build)\b/i.test(normalized)) {
-    return {
-      action: '构建项目',
-      subtitle: '检查前端产物是否可以顺利打包',
-      target: truncateDisplayText(normalized, 34),
-    }
-  }
-
-  if (/\b(pnpm|npm|yarn|bun)\b.*\b(lint|eslint|prettier)\b/i.test(normalized)) {
-    return {
-      action: '检查代码风格',
-      subtitle: '统一格式并发现潜在语法问题',
-      target: truncateDisplayText(normalized, 34),
-    }
-  }
-
-  if (/\b(pnpm|npm|yarn|bun)\b.*\b(install|add)\b/i.test(normalized)) {
-    return {
-      action: '安装依赖',
-      subtitle: '补齐当前任务所需的运行环境',
-      target: truncateDisplayText(normalized, 34),
-    }
-  }
-
-  if (/\bgit\s+(status|diff|log|show)\b/i.test(normalized)) {
-    return {
-      action: '检查仓库状态',
-      subtitle: '确认当前代码改动与上下文信息',
-      target: truncateDisplayText(normalized, 34),
-    }
-  }
-
-  if (/\bgit\s+(add|commit)\b/i.test(normalized)) {
-    return {
-      action: '提交代码',
-      subtitle: '整理本轮修改并写入 Git 历史',
-      target: truncateDisplayText(normalized, 34),
-    }
-  }
-
-  if (/\b(rg|grep)\b/i.test(normalized)) {
-    return {
-      action: '搜索代码内容',
-      subtitle: '定位项目里的关键实现位置',
-      target: truncateDisplayText(normalized, 34),
-    }
-  }
-
-  if (/\b(ls|find)\b/i.test(normalized)) {
-    return {
-      action: '查看项目结构',
-      subtitle: '检查目录和文件分布情况',
-      target: truncateDisplayText(normalized, 34),
-    }
-  }
-
-  if (/\b(cat|sed)\b/i.test(normalized)) {
-    return {
-      action: '读取文件内容',
-      subtitle: '查看现有实现细节后再继续处理',
-      target: truncateDisplayText(normalized, 34),
-    }
-  }
-
-  if (/\b(node|python|python3|bash|sh)\b/i.test(normalized)) {
-    return {
-      action: '运行脚本',
-      subtitle: '执行辅助脚本完成当前步骤',
-      target: truncateDisplayText(normalized, 34),
-    }
-  }
-
-  return {
-    action: '执行命令',
-    subtitle: '通过命令行推进当前任务',
-    target: truncateDisplayText(normalized, 34),
-  }
-}
-
-function getToolExecutionDisplay(item: ToolExecutionItem) {
-  if (item.kind === 'workflow_step' || item.tool_name === 'openwork_step') {
-    return {
-      title:
-        item.display_title ||
-        item.step_title ||
-        (item.step ? item.step.replace(/[_-]+/g, ' ') : '流程步骤'),
-      subtitle:
-        item.display_subtitle ||
-        (typeof item.progress === 'number'
-          ? `当前进度 ${Math.max(0, Math.min(100, item.progress))}%`
-          : 'OpenWork 正在执行当前步骤'),
-      target: item.target ? formatToolPathLabel(item.target) : '',
-    }
-  }
-
-  const path = extractPathCandidate(item.args_preview, item.result_preview)
-  const fileLabel = formatToolPathLabel(path)
-  const friendlyFileLabel = formatToolFriendlyLabel(path)
-  const command = extractCommandCandidate(item.args_preview, item.result_preview)
-  const query = extractSearchQuery(item.args_preview, item.result_preview)
-  const url = extractUrlCandidate(item.args_preview, item.result_preview)
-
-  switch (item.tool_name) {
-    case 'read':
-      return {
-        title: buildToolActionText(item, '读取参考文件'),
-        subtitle: friendlyFileLabel
-          ? `提取 ${friendlyFileLabel} 的上下文内容`
-          : '读取项目里的说明、配置或已有产物',
-        target: fileLabel,
-      }
-    case 'write':
-      return {
-        title: buildToolActionText(item, '写入输出文件'),
-        subtitle: friendlyFileLabel
-          ? `生成并保存 ${friendlyFileLabel}`
-          : '将本轮结果落盘为可交付文件',
-        target: fileLabel,
-      }
-    case 'edit':
-    case 'replace':
-      return {
-        title: buildToolActionText(item, '修改文件内容'),
-        subtitle: friendlyFileLabel
-          ? `更新 ${friendlyFileLabel} 的实现细节`
-          : '对现有文件进行定向调整',
-        target: fileLabel,
-      }
-    case 'bash': {
-      const commandSummary = summarizeCommandAction(command)
-      return {
-        title: buildToolActionText(item, commandSummary.action),
-        subtitle: commandSummary.subtitle,
-        target: commandSummary.target,
-      }
-    }
-    case 'search':
-    case 'web_search':
-      return {
-        title: buildToolActionText(item, '搜索资料'),
-        subtitle: query
-          ? `检索和整理 “${truncateDisplayText(query, 22)}” 相关信息`
-          : '从网络中查找当前任务所需信息',
-        target: truncateDisplayText(query, 28),
-      }
-    case 'fetch':
-    case 'open':
-      return {
-        title: buildToolActionText(item, '访问网页内容'),
-        subtitle: url ? `打开 ${formatHostLabel(url)} 获取进一步信息` : '读取网页内容以补充上下文',
-        target: formatHostLabel(url),
-      }
-    case 'glob':
-    case 'find':
-      return {
-        title: buildToolActionText(item, '查找相关文件'),
-        subtitle: fileLabel ? `定位 ${fileLabel} 附近的相关内容` : '在工作区里查找目标文件',
-        target: fileLabel,
-      }
-    case 'grep':
-      return {
-        title: buildToolActionText(item, '搜索代码内容'),
-        subtitle: query
-          ? `检索 “${truncateDisplayText(query, 22)}” 出现的位置`
-          : '在项目里搜索关键文本',
-        target: truncateDisplayText(query, 28),
-      }
-    case 'list_dir':
-    case 'ls':
-      return {
-        title: buildToolActionText(item, '查看目录结构'),
-        subtitle: fileLabel ? `检查 ${fileLabel} 所在目录的文件分布` : '浏览当前工作区的目录结构',
-        target: fileLabel,
-      }
-    case 'multi_tool_use':
-      return {
-        title: buildToolActionText(item, '并行处理多个步骤'),
-        subtitle: '同时执行多项独立操作以加快任务推进',
-        target: '',
-      }
-    default:
-      return {
-        title: buildToolActionText(item, getLocalizedToolName(item.tool_name)),
-        subtitle: '调用辅助工具推进当前任务',
-        target: fileLabel || truncateDisplayText(command || query || url, 28),
-      }
-  }
-}
-
-function formatToolExecutionStatus(item: {
-  event: 'start' | 'update' | 'end'
-  phase?: 'assembling' | 'executing' | 'completed'
-  kind?: 'tool' | 'workflow_step'
-  args_complete?: boolean
-  is_error?: boolean
-}) {
-  if (item.kind === 'workflow_step') {
-    if (item.is_error) return '步骤失败'
-    if (item.event === 'start') return '执行中'
-    if (item.phase === 'completed') return '已完成'
-  }
-  if (item.phase === 'assembling') {
-    return item.args_complete ? '等待执行' : '生成参数中'
-  }
-  if (item.phase === 'executing') {
-    if (item.event === 'start') return '开始执行'
-    return '执行中'
-  }
-  if (item.phase === 'completed') {
-    if (item.is_error) return '执行失败'
-    return '执行完成'
-  }
-  if (item.event === 'start') return '开始执行'
-  if (item.event === 'update') return '执行中'
-  if (item.is_error) return '执行失败'
-  return '执行完成'
-}
-
-function isToolExecutionActive(item: {
-  event: 'start' | 'update' | 'end'
-  phase?: 'assembling' | 'executing' | 'completed'
-  is_error?: boolean
-}) {
-  if (item.is_error) return false
-  if (item.phase === 'completed') return false
-  return item.event === 'start' || item.event === 'update'
-}
-
-function getToolCardClass(item: {
-  event: 'start' | 'update' | 'end'
-  phase?: 'assembling' | 'executing' | 'completed'
-  is_error?: boolean
-}) {
-  if (item.is_error) {
-    return 'tool-card-error'
-  }
-  if (isToolExecutionActive(item)) {
-    return 'tool-card-active'
-  }
-  return 'tool-card-complete'
-}
-
-function getToolStatusClass(item: {
-  event: 'start' | 'update' | 'end'
-  phase?: 'assembling' | 'executing' | 'completed'
-  is_error?: boolean
-}) {
-  if (item.is_error) {
-    return 'tool-status-error'
-  }
-  if (isToolExecutionActive(item)) {
-    return 'tool-status-active'
-  }
-  return 'tool-status-complete'
-}
 
 function highlightBlock(str: string, lang?: string) {
   const blockId = `code-block-${Date.now()}-${Math.floor(Math.random() * 1000)}`
@@ -1675,7 +1244,14 @@ function openSingleImagePreview(src: string) {
     </div>
 
     <!-- 深度思考内容 -->
-    <div v-if="!isUserMessage && (reasoningText || (loading && usingDeepThinking))" class="mb-2">
+    <div
+      v-if="
+        !isUserMessage &&
+        !hasOrderedReasoningSegments &&
+        (reasoningText || (loading && usingDeepThinking))
+      "
+      class="mb-2"
+    >
       <div
         @click="showThinking = !showThinking"
         class="text-gray-600 mb-1 cursor-pointer items-center btn-pill glow-container"
@@ -1729,33 +1305,8 @@ function openSingleImagePreview(src: string) {
           v-if="showToolExecution"
           class="pl-5 mt-2 border-l-2 border-gray-300 dark:border-gray-600 flex flex-col gap-2"
         >
-          <div
-            v-for="item in parsedToolExecution"
-            :key="item.tool_call_id"
-            :class="[
-              'tool-card rounded-2xl border px-3 py-3 text-sm transition-all duration-300',
-              getToolCardClass(item),
-            ]"
-          >
-            <div class="flex items-center justify-between gap-3">
-              <div class="flex min-w-0 items-center gap-2">
-                <span :class="['tool-status-dot', getToolStatusClass(item)]"></span>
-                <div class="tool-card-title font-medium text-gray-800 dark:text-gray-100">
-                  {{ getToolExecutionDisplay(item).title }}
-                </div>
-              </div>
-              <div :class="['tool-status-pill shrink-0 text-xs', getToolStatusClass(item)]">
-                {{ formatToolExecutionStatus(item) }}
-              </div>
-            </div>
-            <div class="mt-2 flex flex-col gap-2">
-              <div class="tool-card-subtitle break-words text-xs">
-                {{ getToolExecutionDisplay(item).subtitle }}
-              </div>
-              <div v-if="getToolExecutionDisplay(item).target" class="tool-card-tag">
-                {{ getToolExecutionDisplay(item).target }}
-              </div>
-            </div>
+          <div v-for="item in parsedToolExecution" :key="item.tool_call_id" class="text-sm">
+            <ToolExecutionRenderer :item="item" />
           </div>
         </div>
       </transition>
@@ -1780,31 +1331,15 @@ function openSingleImagePreview(src: string) {
               v-html="renderAssistantMarkdown(segment.text)"
             ></div>
             <div
-              v-else
+              v-else-if="segment.type === 'reasoning'"
               :class="[
-                'tool-card rounded-2xl border px-3 py-3 text-sm transition-all duration-300',
-                getToolCardClass(segment),
+                'markdown-body text-gray-600 dark:text-gray-400 pl-5 border-l-2 border-gray-300 dark:border-gray-600',
+                { 'markdown-body-generate': loading || !segment.text },
               ]"
-            >
-              <div class="flex items-center justify-between gap-3">
-                <div class="flex min-w-0 items-center gap-2">
-                  <span :class="['tool-status-dot', getToolStatusClass(segment)]"></span>
-                  <div class="tool-card-title font-medium text-gray-800 dark:text-gray-100">
-                    {{ getToolExecutionDisplay(segment).title }}
-                  </div>
-                </div>
-                <div :class="['tool-status-pill shrink-0 text-xs', getToolStatusClass(segment)]">
-                  {{ formatToolExecutionStatus(segment) }}
-                </div>
-              </div>
-              <div class="mt-2 flex flex-col gap-2">
-                <div class="tool-card-subtitle break-words text-xs">
-                  {{ getToolExecutionDisplay(segment).subtitle }}
-                </div>
-                <div v-if="getToolExecutionDisplay(segment).target" class="tool-card-tag">
-                  {{ getToolExecutionDisplay(segment).target }}
-                </div>
-              </div>
+              v-html="renderAssistantMarkdown(segment.text)"
+            ></div>
+            <div v-else class="text-sm">
+              <ToolExecutionRenderer :item="segment" />
             </div>
           </template>
         </div>

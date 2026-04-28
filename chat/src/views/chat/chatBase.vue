@@ -65,7 +65,9 @@ interface ToolExecutionStreamItem {
   progress?: number
   args_complete?: boolean
   args_preview?: string
+  input?: unknown
   is_error?: boolean
+  result?: unknown
   result_preview?: string
 }
 
@@ -75,12 +77,21 @@ interface TextStreamSegment {
   text: string
 }
 
+interface ReasoningStreamSegment {
+  id: string
+  type: 'reasoning'
+  text: string
+}
+
 interface ToolExecutionStreamSegment extends ToolExecutionStreamItem {
   id: string
   type: 'tool_execution'
 }
 
-type AssistantStreamSegment = TextStreamSegment | ToolExecutionStreamSegment
+type AssistantStreamSegment =
+  | TextStreamSegment
+  | ReasoningStreamSegment
+  | ToolExecutionStreamSegment
 
 interface ActiveStreamRequest {
   groupId?: number
@@ -722,7 +733,7 @@ const onConversation = async ({
     const isCacheEnabled = isStreamCacheEnabled.value
     let streamSegments: AssistantStreamSegment[] = []
     const toolSegmentIndexById = new Map<string, number>()
-    let lastVisibleSegmentType: 'text' | 'tool_execution' | null = null
+    let lastVisibleSegmentType: 'text' | 'reasoning' | 'tool_execution' | null = null
 
     const serializeStreamSegments = () => {
       return streamSegments.length ? JSON.stringify(streamSegments) : ''
@@ -754,7 +765,26 @@ const onConversation = async ({
       updateGroupChat(dataSources.value.length - 1, buildAssistantPatch())
     }
 
+    const keepScrollAtBottomAfterRender = (shouldFollowBottom: boolean) => {
+      if (!shouldFollowBottom) return
+
+      nextTick(() => {
+        requestAnimationFrame(() => {
+          const scrollElement = scrollRef.value
+          if (!scrollElement) return
+
+          scrollElement.scrollTo({
+            top: scrollElement.scrollHeight,
+            behavior: 'auto',
+          })
+          isAtBottom.value = true
+        })
+      })
+    }
+
     const handleStreamJsonObject = (jsonObj: Record<string, any>) => {
+      const shouldFollowBottom = isAtBottom.value
+
       // 处理用户余额
       if (jsonObj.userBalance) authStore.updateUserBalance(jsonObj.userBalance)
 
@@ -787,9 +817,6 @@ const onConversation = async ({
             const isFirstContent = displayedText.length === newText.length
             updateWorkflowContent(newText, isFirstContent)
           }
-
-          // 滚动到底部
-          scrollToBottomIfAtBottom()
         }
       }
 
@@ -808,6 +835,7 @@ const onConversation = async ({
         } else {
           fullReasoningText += newText
           displayedReasoningText += newText
+          appendReasoningStreamSegment(newText)
 
           // 实时更新UI
           syncAssistantMessage()
@@ -818,9 +846,6 @@ const onConversation = async ({
             const isFirstContent = displayedText.length === newText.length
             updateWorkflowContent(newText, isFirstContent)
           }
-
-          // 滚动到底部
-          scrollToBottomIfAtBottom()
         }
       }
 
@@ -835,18 +860,25 @@ const onConversation = async ({
       }
       if (jsonObj.tool_execution) {
         const didFlushBufferedText = isCacheEnabled ? flushPendingTextBuffer() : false
+        const didFlushBufferedReasoning = isCacheEnabled ? flushPendingReasoningBuffer() : false
         toolExecution = jsonObj.tool_execution
         const didUpdateToolSegments = upsertToolExecutionSegments(toolExecution)
 
-        if (didFlushBufferedText || didUpdateToolSegments || toolExecution) {
+        if (
+          didFlushBufferedText ||
+          didFlushBufferedReasoning ||
+          didUpdateToolSegments ||
+          toolExecution
+        ) {
           syncAssistantMessage()
         }
       }
       if (jsonObj.tool_execution_delta) {
         const didFlushBufferedText = isCacheEnabled ? flushPendingTextBuffer() : false
+        const didFlushBufferedReasoning = isCacheEnabled ? flushPendingReasoningBuffer() : false
         const didUpdateToolSegments = upsertToolExecutionItems([jsonObj.tool_execution_delta])
 
-        if (didFlushBufferedText || didUpdateToolSegments) {
+        if (didFlushBufferedText || didFlushBufferedReasoning || didUpdateToolSegments) {
           syncAssistantMessage()
         }
       }
@@ -862,8 +894,7 @@ const onConversation = async ({
       }
       if (jsonObj.finishReason) finishReason = jsonObj.finishReason
 
-      // 滚动到底部
-      scrollToBottomIfAtBottom()
+      keepScrollAtBottomAfterRender(shouldFollowBottom)
     }
 
     const appendTextStreamSegment = (textChunk: string) => {
@@ -886,6 +917,26 @@ const onConversation = async ({
       lastVisibleSegmentType = 'text'
     }
 
+    const appendReasoningStreamSegment = (textChunk: string) => {
+      if (!textChunk) return
+
+      const lastSegment = streamSegments[streamSegments.length - 1]
+      if (lastVisibleSegmentType === 'reasoning' && lastSegment?.type === 'reasoning') {
+        lastSegment.text += textChunk
+        return
+      }
+
+      streamSegments = [
+        ...streamSegments,
+        {
+          id: `reasoning-${streamSegments.length + 1}-${Date.now()}`,
+          type: 'reasoning',
+          text: textChunk,
+        },
+      ]
+      lastVisibleSegmentType = 'reasoning'
+    }
+
     const flushPendingTextBuffer = () => {
       if (!textBuffer.length) return false
 
@@ -896,6 +947,16 @@ const onConversation = async ({
 
       const isFirstContent = displayedText.length === pendingText.length
       updateWorkflowContent(pendingText, isFirstContent)
+      return true
+    }
+
+    const flushPendingReasoningBuffer = () => {
+      if (!reasoningBuffer.length) return false
+
+      const pendingReasoning = reasoningBuffer
+      reasoningBuffer = ''
+      displayedReasoningText += pendingReasoning
+      appendReasoningStreamSegment(pendingReasoning)
       return true
     }
 
@@ -1088,6 +1149,8 @@ const onConversation = async ({
     const updateDisplay = () => {
       if (!isCacheEnabled) return // 如果未启用缓存，则不使用缓存更新显示
 
+      const shouldFollowBottom = isAtBottom.value
+
       // 检查是否有内容需要显示
       const hasTextToDisplay = textBuffer.length > 0
       const hasReasoningToDisplay = reasoningBuffer.length > 0
@@ -1162,6 +1225,7 @@ const onConversation = async ({
         reasoningBuffer = reasoningBuffer.substring(reasoningCharsToDisplay)
 
         displayedReasoningText += nextReasoningChunk
+        appendReasoningStreamSegment(nextReasoningChunk)
       }
 
       // 更新UI
@@ -1175,7 +1239,7 @@ const onConversation = async ({
       }
 
       // 滚动到底部（如果用户已经在底部）
-      scrollToBottomIfAtBottom()
+      keepScrollAtBottomAfterRender(shouldFollowBottom)
 
       // 根据缓冲区状态调整速度
       adjustDisplaySpeed()

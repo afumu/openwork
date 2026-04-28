@@ -1,6 +1,6 @@
 import { handleError } from '@/common/utils';
 import { Injectable, Logger } from '@nestjs/common';
-import { mapBridgeEventToChatProgress } from './agentEventMapper';
+import { createBridgeEventProgressMapper } from './agentEventMapper';
 import { OpenSandboxRuntimeService } from './opensandboxRuntime.service';
 import type {
   AgentChatProgress,
@@ -183,6 +183,7 @@ export class OpenSandboxAgentChatService {
       input.abortController.signal.addEventListener('abort', abortEvents, { once: true });
 
       const eventStream = this.openEventStream(descriptor, since, eventController.signal);
+      const mapBridgeEventToChatProgress = createBridgeEventProgressMapper();
       await this.postMessage(descriptor, {
         agent: input.agent || 'claude_code',
         metadata: {

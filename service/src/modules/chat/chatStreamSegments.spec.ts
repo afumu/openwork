@@ -10,6 +10,8 @@ describe('chat stream segment persistence', () => {
     const collector = createStreamSegmentCollector();
 
     collector.appendText('第一段内容');
+    collector.appendReasoning('第一段思考');
+    collector.appendReasoning('，继续思考');
     collector.upsertToolExecution({
       tool_call_id: 'tool-1',
       tool_name: 'coremi_step',
@@ -31,6 +33,11 @@ describe('chat stream segment persistence', () => {
         id: expect.stringMatching(/^text-/),
         type: 'text',
         text: '第一段内容',
+      },
+      {
+        id: expect.stringMatching(/^reasoning-/),
+        type: 'reasoning',
+        text: '第一段思考，继续思考',
       },
       {
         id: 'tool-tool-1',

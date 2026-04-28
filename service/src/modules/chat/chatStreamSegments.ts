@@ -14,7 +14,9 @@ export type ToolExecutionStreamItem = {
   progress?: number;
   args_complete?: boolean;
   args_preview?: string;
+  input?: unknown;
   is_error?: boolean;
+  result?: unknown;
   result_preview?: string;
 };
 
@@ -24,12 +26,21 @@ type TextStreamSegment = {
   text: string;
 };
 
+type ReasoningStreamSegment = {
+  id: string;
+  type: 'reasoning';
+  text: string;
+};
+
 type ToolExecutionStreamSegment = ToolExecutionStreamItem & {
   id: string;
   type: 'tool_execution';
 };
 
-type AssistantStreamSegment = TextStreamSegment | ToolExecutionStreamSegment;
+type AssistantStreamSegment =
+  | TextStreamSegment
+  | ReasoningStreamSegment
+  | ToolExecutionStreamSegment;
 
 function mergeToolExecution(
   previous: ToolExecutionStreamSegment | undefined,
@@ -51,7 +62,9 @@ function mergeToolExecution(
     progress: incoming.progress ?? previous?.progress,
     args_complete: incoming.args_complete ?? previous?.args_complete,
     args_preview: incoming.args_preview ?? previous?.args_preview,
+    input: incoming.input ?? previous?.input,
     is_error: incoming.is_error ?? previous?.is_error,
+    result: incoming.result ?? previous?.result,
     result_preview: incoming.result_preview ?? previous?.result_preview,
   };
 }
@@ -59,7 +72,7 @@ function mergeToolExecution(
 export function createStreamSegmentCollector() {
   const segments: AssistantStreamSegment[] = [];
   const toolSegmentIndexById = new Map<string, number>();
-  let lastVisibleSegmentType: 'text' | 'tool_execution' | null = null;
+  let lastVisibleSegmentType: 'text' | 'reasoning' | 'tool_execution' | null = null;
 
   const appendText = (text: string) => {
     if (!text) return;
@@ -76,6 +89,23 @@ export function createStreamSegmentCollector() {
       text,
     });
     lastVisibleSegmentType = 'text';
+  };
+
+  const appendReasoning = (text: string) => {
+    if (!text) return;
+
+    const lastSegment = segments[segments.length - 1];
+    if (lastVisibleSegmentType === 'reasoning' && lastSegment?.type === 'reasoning') {
+      lastSegment.text += text;
+      return;
+    }
+
+    segments.push({
+      id: `reasoning-${segments.length + 1}-${Date.now()}`,
+      type: 'reasoning',
+      text,
+    });
+    lastVisibleSegmentType = 'reasoning';
   };
 
   const upsertToolExecution = (item: ToolExecutionStreamItem) => {
@@ -106,6 +136,7 @@ export function createStreamSegmentCollector() {
   };
 
   return {
+    appendReasoning,
     appendText,
     serialize,
     serializeToolExecutions,
