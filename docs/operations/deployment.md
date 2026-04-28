@@ -1,25 +1,22 @@
 # 部署说明
 
-OpenWork 的主服务使用 Node + PM2 运行；按对话组隔离的运行时容器则通过 Docker 承载。
+OpenWork 当前部署包只包含主服务与前端产物。运行时容器能力将在后续 OpenSandbox 改造中重新接入。
 
 ## 主要组成
 
 1. 主服务：由 PM2 托管的 `service/dist`
 2. 前端产物：`admin/dist` 与 `chat/dist`
-3. 运行时镜像：`openwork-runtime:latest`
-4. 运行时打包产物：默认发布到 `~/.openwork/runtime-bundles`
-
-## 关键环境变量
-
-- `PI_DOCKER_ENABLED`
-- `PI_DOCKER_IMAGE`
-- `PI_DOCKER_RUNTIME_BUNDLE_HOST_PATH`
-- `OPENWORK_INTERNAL_SEARCH_URL`
-- `OPENWORK_INTERNAL_SEARCH_TOKEN`
+3. 配置文件：由 `service/.env.example` 初始化
 
 ## 推荐流程
 
 1. 运行 `./build.sh`
-2. 如果运行时代码有改动，发布新的运行时打包产物
-3. 重启主服务
-4. 当打包产物或版本变更时，重启用户运行时容器
+2. 将 `deploy/` 发布到服务器
+3. 在服务器执行 `cd deploy && ./start.sh`
+4. 通过 `pm2 status` 与 `pm2 logs openwork` 检查服务状态
+
+## 说明
+
+- `./build.sh` 不再构建或发布独立运行时包。
+- `deploy/start.sh` 不再要求 Docker。
+- 后续接入 OpenSandbox 时，再补充 sandbox 配置、镜像发布和运行时健康检查流程。

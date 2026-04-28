@@ -31,14 +31,14 @@ export class ChatLogEntity extends BaseEntity {
   @Column({ comment: '模型工具调用', nullable: true, type: 'text' })
   tool_calls: string;
 
-  @Column({ comment: 'PI Agent tool execution trace', nullable: true, type: 'mediumtext' })
+  @Column({ comment: 'Tool execution trace', nullable: true, type: 'mediumtext' })
   tool_execution: string;
 
   @Column({ comment: 'Ordered assistant stream segments', nullable: true, type: 'mediumtext' })
   stream_segments: string;
 
   @Column({
-    comment: 'PI Agent artifacts produced by this message',
+    comment: 'Artifacts produced by this message',
     nullable: true,
     type: 'mediumtext',
   })

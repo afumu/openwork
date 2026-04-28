@@ -3,7 +3,7 @@ import { Type } from 'class-transformer';
 import { IsInt, IsOptional } from 'class-validator';
 
 export class StopChatDto {
-  @ApiPropertyOptional({ example: 123, description: '当前会话 groupId，优先用于定位 PI session' })
+  @ApiPropertyOptional({ example: 123, description: '当前会话 groupId' })
   @IsOptional()
   @Type(() => Number)
   @IsInt()

@@ -5,10 +5,10 @@
 ## 阅读顺序
 
 1. [当前状态](./current/system-status.md)
-2. [仓库地图](./overview/repo-map.md)
-3. [开发风格指南](./overview/development-style.md)
-4. [部署说明](./operations/deployment.md)
-5. [运行时打包产物](./operations/runtime-bundle.md)
+2. [OpenSandbox 运行时改造方案](./current/opensandbox-runtime-plan.md)
+3. [仓库地图](./overview/repo-map.md)
+4. [开发风格指南](./overview/development-style.md)
+5. [部署说明](./operations/deployment.md)
 
 ## 其他说明
 

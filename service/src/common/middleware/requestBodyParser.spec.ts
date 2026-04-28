@@ -7,7 +7,7 @@ declare const expect: any;
 declare const it: any;
 
 describe('request body parser configuration', () => {
-  it('uses a larger default request body limit for PI runtime payloads', () => {
+  it('uses a larger default request body limit for chat payloads', () => {
     expect(resolveRequestBodyLimit()).toBe('20mb');
   });
 

@@ -1,5 +1,4 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
-import { OpenAIChatService } from '../aiTool/chat/chat.service';
 import { PublishWechatArticleDto } from './dto/publishWechatArticle.dto';
 import { PublishWechatPreviewDto } from './dto/publishWechatPreview.dto';
 import { SyncWechatDraftDto } from './dto/syncWechatDraft.dto';
@@ -9,14 +8,12 @@ import {
   assertNoRelativeImages,
   buildPreviewMarkdownFromArtifact,
   buildWechatPublishMarkdown,
-  mergeWechatDraftIntoArtifact,
 } from './wechatMarkdown';
 import { PublishMarkdownResult, WechatPublisher } from './wechatPublisher';
 
 @Injectable()
 export class PublishExecutionService {
   constructor(
-    private readonly openAIChatService: OpenAIChatService,
     private readonly publishAccountService: PublishAccountService,
     private readonly wechatCoverService: WechatCoverService,
     private readonly wechatPublisher: WechatPublisher = new WechatPublisher(),
@@ -35,19 +32,10 @@ export class PublishExecutionService {
       };
     }
 
-    const artifact = await this.openAIChatService.readArtifact(
-      userId,
-      input.groupId,
-      input.runId || undefined,
-      input.path,
-      `${traceKey}:${userId}:${input.groupId}`,
+    throw new HttpException(
+      `${traceKey} 需要直接提供 markdown；运行时产物读取入口已移除`,
+      HttpStatus.BAD_REQUEST,
     );
-
-    return {
-      artifact,
-      content: String(artifact?.content || ''),
-      usesDraftOverride: false,
-    };
   }
 
   async preparePreview(userId: number, dto: PublishWechatPreviewDto) {
@@ -155,35 +143,6 @@ export class PublishExecutionService {
   }
 
   async syncDraftToArtifact(userId: number, dto: SyncWechatDraftDto) {
-    const artifact = await this.openAIChatService.readArtifact(
-      userId,
-      dto.groupId,
-      dto.runId || undefined,
-      dto.path,
-      `wechat-sync:${userId}:${dto.groupId}`,
-    );
-
-    const content = String(artifact?.content || '');
-    if (!content.trim()) {
-      throw new HttpException('原稿内容为空，无法同步发布工作副本', HttpStatus.BAD_REQUEST);
-    }
-
-    const mergedContent = mergeWechatDraftIntoArtifact(dto.path, content, dto.markdown);
-    const result = await this.openAIChatService.rewriteArtifact(
-      userId,
-      dto.groupId,
-      dto.runId || undefined,
-      dto.path,
-      mergedContent,
-      `wechat-sync:${userId}:${dto.groupId}`,
-    );
-
-    return {
-      path: dto.path,
-      runId: dto.runId || null,
-      size: result?.size ?? mergedContent.length,
-      success: true,
-      updatedAt: result?.updatedAt || new Date().toISOString(),
-    };
+    throw new HttpException('运行时产物同步入口已移除', HttpStatus.BAD_REQUEST);
   }
 }

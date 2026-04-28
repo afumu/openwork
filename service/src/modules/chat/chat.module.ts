@@ -1,9 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { OpenAIChatService } from '../aiTool/chat/chat.service';
-import { AgentModelProxyService } from '../aiTool/chat/agentModelProxy.service';
-import { PiRuntimeManagerService } from '../aiTool/chat/piRuntimeManager';
-import { RuntimeTerminalGatewayService } from '../aiTool/chat/runtimeTerminalGateway';
 import { NetSearchService } from '../aiTool/search/netSearch.service';
 import { AppEntity } from '../app/app.entity';
 import { AppService } from '../app/app.service';
@@ -37,9 +34,6 @@ import { UserBalanceService } from '../userBalance/userBalance.service';
 import { VerificationEntity } from '../verification/verification.entity';
 import { VerificationService } from '../verification/verification.service';
 import { ChatController } from './chat.controller';
-import { ExpertDiscoveryService } from './expertDiscovery.service';
-import { GroupDiscussionService } from './groupDiscussion.service';
-import { ChatInternalController } from './chat.internal.controller';
 import { ChatService } from './chat.service';
 
 @Global()
@@ -67,7 +61,7 @@ import { ChatService } from './chat.service';
       ModelsEntity,
     ]),
   ],
-  controllers: [ChatController, ChatInternalController],
+  controllers: [ChatController],
   providers: [
     ChatService,
     UserBalanceService,
@@ -83,14 +77,9 @@ import { ChatService } from './chat.service';
     ChatGroupService,
     ModelsService,
     OpenAIChatService,
-    AgentModelProxyService,
-    PiRuntimeManagerService,
-    RuntimeTerminalGatewayService,
     NetSearchService,
-    ExpertDiscoveryService,
-    GroupDiscussionService,
     AppService,
   ],
-  exports: [ChatService, OpenAIChatService, RuntimeTerminalGatewayService],
+  exports: [ChatService, OpenAIChatService],
 })
 export class ChatModule {}

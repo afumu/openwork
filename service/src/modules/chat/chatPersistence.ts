@@ -3,7 +3,7 @@ export const TRANSIENT_ASSISTANT_FAILURE_PATTERNS = [
   /operation was aborted/iu,
   /AbortError/iu,
   /upstream model request failed/iu,
-  /PI gateway request failed/iu,
+  /gateway request failed/iu,
   /当前分组上游负载已饱和/iu,
 ];
 

@@ -64,17 +64,6 @@ type ActiveChatAbortEntry = {
   traceId: string;
 };
 
-type ChatArtifactFileItem = {
-  name: string;
-  path: string;
-  preview?: string;
-  size: number;
-  type: string;
-  updatedAt: string;
-  runId: string | null;
-  source?: string;
-};
-
 @Injectable()
 export class ChatService {
   private readonly activeChatAbortControllers = new Map<string, Set<ActiveChatAbortEntry>>();
@@ -158,82 +147,6 @@ export class ChatService {
     return null;
   }
 
-  private flattenArtifactManifestFiles(manifest: any): ChatArtifactFileItem[] {
-    if (!manifest || typeof manifest !== 'object') return [];
-
-    if (Array.isArray(manifest.workspaceFiles)) {
-      return manifest.workspaceFiles
-        .filter(file => file && typeof file === 'object' && file.path)
-        .map(file => ({
-          name: String(file.name || String(file.path).split('/').pop() || 'file'),
-          path: String(file.path),
-          preview: typeof file.preview === 'string' ? file.preview : undefined,
-          size: Number(file.size || 0),
-          type: String(file.type || 'unknown'),
-          updatedAt: String(file.updatedAt || ''),
-          runId: file.runId ? String(file.runId) : null,
-          source: file.source ? String(file.source) : undefined,
-        }));
-    }
-
-    if (!Array.isArray(manifest.runs)) return [];
-
-    return manifest.runs.flatMap(run => {
-      if (!run || typeof run !== 'object' || !Array.isArray(run.files)) return [];
-      const runId = String(run.runId || '');
-      const source = String(run.source || '');
-
-      return run.files
-        .filter(file => file && typeof file === 'object' && file.path)
-        .map(file => ({
-          name: String(file.name || String(file.path).split('/').pop() || 'file'),
-          path:
-            source === 'artifacts_root'
-              ? `data/${runId}/${String(file.path)}`
-              : `${runId}/${String(file.path)}`,
-          preview: typeof file.preview === 'string' ? file.preview : undefined,
-          size: Number(file.size || 0),
-          type: String(file.type || 'unknown'),
-          updatedAt: String(file.updatedAt || ''),
-          runId: runId || null,
-          source: source || undefined,
-        }));
-    });
-  }
-
-  private buildArtifactSnapshot(files: ChatArtifactFileItem[]) {
-    return new Map(files.map(file => [file.path, `${file.updatedAt}:${file.size}`]));
-  }
-
-  private diffArtifactFiles(
-    before: Map<string, string>,
-    after: ChatArtifactFileItem[],
-  ): ChatArtifactFileItem[] {
-    return after.filter(file => before.get(file.path) !== `${file.updatedAt}:${file.size}`);
-  }
-
-  private async safeListConversationArtifactFiles(
-    userId: number,
-    groupId: number | undefined,
-    traceId: string,
-    stage: 'before' | 'after',
-  ): Promise<ChatArtifactFileItem[]> {
-    if (!groupId) return [];
-
-    try {
-      const manifest = await this.openAIChatService.listArtifacts(userId, groupId, traceId);
-      return this.flattenArtifactManifestFiles(manifest);
-    } catch (error) {
-      this.logTrace('warn', traceId, '查询对话产物快照失败，继续聊天流程', {
-        error: serializeErrorForLog(error),
-        groupId,
-        stage,
-        userId,
-      });
-      return [];
-    }
-  }
-
   private registerActiveChatAbort(
     sessionId: string,
     entry: ActiveChatAbortEntry,
@@ -293,134 +206,16 @@ export class ChatService {
       }
     }
 
-    const piAbort = await this.openAIChatService.abortPiSession(
-      sessionId,
-      req?.user?.id,
-      body?.groupId || (body?.chatId ? `chat-${body.chatId}` : sessionId),
-      traceId,
-    );
     this.logTrace('log', traceId, '收到停止聊天请求并已尝试中断', {
       abortedRequestCount,
       chatId: body?.chatId ?? null,
       groupId: body?.groupId ?? null,
-      piAbort,
       sessionId,
     });
 
     return {
       abortedRequestCount,
-      piAbort,
       sessionId,
-      success: true,
-    };
-  }
-
-  async listArtifacts(body: { groupId?: number }, req?: Request) {
-    const traceId = this.createTraceId(req?.user?.id, body?.groupId);
-    const groupId = Number(body?.groupId || 0);
-
-    if (!groupId) {
-      throw new HttpException('缺少 groupId', HttpStatus.BAD_REQUEST);
-    }
-
-    this.logTrace('debug', traceId, '开始查询当前对话产物列表', {
-      groupId,
-      userId: req?.user?.id ?? null,
-    });
-
-    try {
-      const data = await this.openAIChatService.listArtifacts(req.user.id, groupId, traceId);
-      return {
-        data,
-        success: true,
-      };
-    } catch (error) {
-      this.logTrace('error', traceId, '查询当前对话产物列表失败', {
-        error: serializeErrorForLog(error),
-        groupId,
-        userId: req?.user?.id ?? null,
-      });
-      throw error;
-    }
-  }
-
-  async readArtifact(body: { groupId?: number; runId?: string; path?: string }, req?: Request) {
-    const traceId = this.createTraceId(req?.user?.id, body?.groupId);
-    const groupId = Number(body?.groupId || 0);
-    const runId = body?.runId ? String(body.runId).trim() : '';
-    const artifactPath = String(body?.path || '').trim();
-
-    if (!groupId || !artifactPath) {
-      throw new HttpException('缺少必要的产物读取参数', HttpStatus.BAD_REQUEST);
-    }
-
-    this.logTrace('debug', traceId, '开始读取当前对话产物文件', {
-      artifactPath,
-      groupId,
-      runId: runId || null,
-      userId: req?.user?.id ?? null,
-    });
-
-    try {
-      const data = await this.openAIChatService.readArtifact(
-        req.user.id,
-        groupId,
-        runId || undefined,
-        artifactPath,
-        traceId,
-      );
-
-      return {
-        data,
-        success: true,
-      };
-    } catch (error) {
-      this.logTrace('error', traceId, '读取当前对话产物文件失败', {
-        artifactPath,
-        error: serializeErrorForLog(error),
-        groupId,
-        runId: runId || null,
-        userId: req?.user?.id ?? null,
-      });
-      throw error;
-    }
-  }
-
-  async runtimeStatus(body: { groupId?: number }, req?: Request) {
-    const traceId = this.createTraceId(req?.user?.id, body?.groupId);
-    const groupId = Number(body?.groupId || 0);
-
-    if (!groupId) {
-      throw new HttpException('缺少 groupId', HttpStatus.BAD_REQUEST);
-    }
-
-    return {
-      data: await this.openAIChatService.getRuntimeStatus(req.user.id, groupId, traceId),
-      success: true,
-    };
-  }
-
-  async runtimeExec(body: { groupId?: number; command?: string; cwd?: string }, req?: Request) {
-    const traceId = this.createTraceId(req?.user?.id, body?.groupId);
-    const groupId = Number(body?.groupId || 0);
-    const command = String(body?.command || '').trim();
-
-    if (!groupId) {
-      throw new HttpException('缺少 groupId', HttpStatus.BAD_REQUEST);
-    }
-
-    if (!command) {
-      throw new HttpException('缺少可执行的终端命令', HttpStatus.BAD_REQUEST);
-    }
-
-    return {
-      data: await this.openAIChatService.executeRuntimeCommand(
-        req.user.id,
-        groupId,
-        command,
-        traceId,
-        body?.cwd,
-      ),
       success: true,
     };
   }
@@ -1020,10 +815,6 @@ export class ChatService {
       userLogId,
     });
 
-    const artifactSnapshotBefore = this.buildArtifactSnapshot(
-      await this.safeListConversationArtifactFiles(req.user.id, groupId, traceId, 'before'),
-    );
-
     if (autoReplyRes.answer && res) {
       if (autoReplyRes.isAIReplyEnabled === 0) {
         const chars = autoReplyRes.answer.split('');
@@ -1482,20 +1273,6 @@ export class ChatService {
             }
           }
 
-          const artifactFiles = this.diffArtifactFiles(
-            artifactSnapshotBefore,
-            await this.safeListConversationArtifactFiles(req.user.id, groupId, traceId, 'after'),
-          );
-          const artifactFilesJson = artifactFiles.length ? JSON.stringify(artifactFiles) : '';
-          if (artifactFiles.length) {
-            this.logTrace('debug', traceId, '检测到本轮新增或更新的产物文件', {
-              assistantLogId,
-              artifactCount: artifactFiles.length,
-              groupId,
-              paths: artifactFiles.map(file => file.path).slice(0, 20),
-            });
-          }
-
           // 如果检测到敏感词，替换为 ***
           // gpt回答 - 使用替换后的内容存入数据库
           await partialPersistQueue;
@@ -1506,7 +1283,7 @@ export class ChatService {
             tool_calls: response.tool_calls,
             tool_execution: response.tool_execution,
             stream_segments: streamSegmentCollector.serialize(),
-            artifact_files: artifactFilesJson,
+            artifact_files: '',
             promptTokens: billingPromptTokens,
             completionTokens: billingCompletionTokens,
             totalTokens: billingTotalTokens,
@@ -1577,7 +1354,6 @@ export class ChatService {
           response.userBalance = userBalance;
           response.chatId = assistantLogId;
           response.promptReference = promptReference;
-          response.artifact_files = artifactFilesJson;
           return res.write(`\n${JSON.stringify(response)}`);
         } catch (error) {
           // 在这里处理错误，例如打印错误消息到控制台或向用户发送错误响应

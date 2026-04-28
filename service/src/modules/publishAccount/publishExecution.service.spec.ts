@@ -37,11 +37,28 @@ describe('PublishExecutionService', () => {
     };
 
     service = new PublishExecutionService(
-      artifactReader as any,
       accountService as any,
       coverService as any,
       publisher as any,
     );
+    jest
+      .spyOn(service as any, 'resolveArtifactContent')
+      .mockImplementation(async (_userId, input) => {
+        if (input.markdown?.trim()) {
+          return {
+            artifact: null,
+            content: input.markdown.trim(),
+            usesDraftOverride: true,
+          };
+        }
+
+        const artifact = await artifactReader.readArtifact();
+        return {
+          artifact,
+          content: artifact.content,
+          usesDraftOverride: false,
+        };
+      });
 
     const coverSelection = {
       fromCache: false,
@@ -254,58 +271,19 @@ describe('PublishExecutionService', () => {
     expect(preview.markdown).not.toContain('这部分不应进入预览');
   });
 
-  it('syncs edited publish markdown back into the writer body section only', async () => {
-    artifactReader.readArtifact.mockResolvedValue({
-      content: [
-        '# 08 Writer｜独家深度稿',
-        '',
-        '## 核心写作提纲',
-        '',
-        '- 原始提纲',
-        '',
-        '## 完整稿件正文',
-        '',
-        '# 原始标题',
-        '',
-        '原始正文第一段。',
-        '',
-        '## 稿中使用的关键财务、竞争、利益关联、PSC 事实说明',
-        '',
-        '- 原始事实说明',
-      ].join('\n'),
-      type: 'markdown',
-    });
-    artifactReader.rewriteArtifact.mockResolvedValue({
-      path: '08_writer.md',
-      success: true,
-      updatedAt: '2026-04-19T10:00:00.000Z',
+  it('rejects syncing edited publish markdown after runtime artifact writes were removed', async () => {
+    await expect(
+      service.syncDraftToArtifact(12, {
+        groupId: 99,
+        runId: 'run-1',
+        path: '08_writer.md',
+        markdown: '# 新标题\n\n这里是新的发布正文。',
+      }),
+    ).rejects.toMatchObject({
+      message: '运行时产物同步入口已移除',
     });
 
-    const result = await service.syncDraftToArtifact(12, {
-      groupId: 99,
-      runId: 'run-1',
-      path: '08_writer.md',
-      markdown: '# 新标题\n\n这里是新的发布正文。',
-    });
-
-    expect(artifactReader.rewriteArtifact).toHaveBeenCalledWith(
-      12,
-      99,
-      'run-1',
-      '08_writer.md',
-      expect.stringContaining('## 完整稿件正文\n\n# 新标题\n\n这里是新的发布正文。'),
-      expect.any(String),
-    );
-    expect(artifactReader.rewriteArtifact).toHaveBeenCalledWith(
-      12,
-      99,
-      'run-1',
-      '08_writer.md',
-      expect.not.stringContaining('原始正文第一段。'),
-      expect.any(String),
-    );
-    expect(result.path).toBe('08_writer.md');
-    expect(result.updatedAt).toBe('2026-04-19T10:00:00.000Z');
+    expect(artifactReader.rewriteArtifact).not.toHaveBeenCalled();
   });
 
   it('accepts writer sections that use a plain 正文 heading', async () => {

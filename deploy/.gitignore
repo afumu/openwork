@@ -1,7 +1,3 @@
 *
 !.gitignore
 !start.sh
-!pi-runtime/
-pi-runtime/*
-!pi-runtime/setup.sh
-!pi-runtime/check.sh

@@ -92,7 +92,9 @@ describe('conversation memory helpers', () => {
     ];
 
     expect(buildConversationTaskStateSnapshot(records)).toContain('当前工作流步骤：资料整理');
-    expect(buildConversationTaskStateSnapshot(records)).toContain('关键产物：data/report/evidence.md');
+    expect(buildConversationTaskStateSnapshot(records)).toContain(
+      '关键产物：data/report/evidence.md',
+    );
     expect(formatMessagesForSummary(records)).toContain('[workflow] 资料整理');
     expect(formatMessagesForSummary(records)).toContain('[progress] 45');
   });

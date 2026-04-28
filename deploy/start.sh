@@ -142,26 +142,12 @@ cd "${DEPLOY_DIR}"
 require_command node
 require_command pnpm
 require_command pm2
-require_command docker
-
 ensure_env_file
-ensure_env_key "PI_DOCKER_ENABLED" "1"
-ensure_env_key "PI_DOCKER_IMAGE" "openwork-runtime:latest"
-ensure_env_key "PI_DOCKER_HOST" "127.0.0.1"
-ensure_env_key "PI_DOCKER_TOOLS" "coding"
-ensure_env_key "PI_DOCKER_RUNTIME_BUNDLE_HOST_PATH" "${HOME}/.openwork/runtime-bundles"
 
 SERVICE_PORT="$(env_value_or_default "PORT" "9527")"
 
 echo "==> Installing service production dependencies"
 install_runtime_dependencies
-
-echo "==> Preparing PI runtime image and bundle"
-RUNTIME_BUNDLE_HOST_PATH="$(env_value_or_default "PI_DOCKER_RUNTIME_BUNDLE_HOST_PATH" "${HOME}/.openwork/runtime-bundles")"
-PI_IMAGE="$(env_value_or_default "PI_DOCKER_IMAGE" "openwork-runtime:latest")"
-PI_DOCKER_RUNTIME_BUNDLE_HOST_PATH="${RUNTIME_BUNDLE_HOST_PATH}" \
-  PI_RUNTIME_IMAGE_NAME="${PI_IMAGE}" \
-  bash "${DEPLOY_DIR}/pi-runtime/setup.sh"
 
 echo "==> Starting main service with PM2"
 stop_legacy_pm2_apps
@@ -177,11 +163,7 @@ OpenWork service startup command finished.
 Main service:
   http://127.0.0.1:${SERVICE_PORT}
 
-PI runtime:
-  image: ${PI_IMAGE}
-  bundles: ${RUNTIME_BUNDLE_HOST_PATH}
-
 Useful checks:
-  bash ./pi-runtime/check.sh
-  docker ps -a --filter "label=openwork.pi.runtime=1"
+  pm2 status
+  pm2 logs ${APP_NAME}
 EOF
