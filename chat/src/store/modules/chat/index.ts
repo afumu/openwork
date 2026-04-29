@@ -16,6 +16,7 @@ import {
 } from '@/api/chatLog'
 import { fetchModelBaseConfigAPI } from '@/api/models'
 import { fetchQueryPluginsAPI } from '@/api/plugin'
+import { normalizeGroupType } from '@/views/chat/groupMode'
 import { useGlobalStoreWithOut } from '../global'
 
 const useGlobalStore = useGlobalStoreWithOut()
@@ -122,12 +123,18 @@ export const useChatStore = defineStore('chat-store', {
     },
 
     /* 新增新的对话组 */
-    async addNewChatGroup(appId = 0, modelConfig?: any, params?: string) {
+    async addNewChatGroup(
+      appId = 0,
+      modelConfig?: any,
+      params?: string,
+      options?: { groupType?: Chat.GroupType }
+    ) {
       try {
         const res: any = await fetchCreateGroupAPI({
           appId,
           modelConfig,
           params,
+          groupType: normalizeGroupType(options?.groupType),
         })
 
         this.active = res.data.id
@@ -169,12 +176,14 @@ export const useChatStore = defineStore('chat-store', {
             fileUrl,
             content,
             appModel,
+            groupType,
           } = item
           return {
             uuid,
             title,
             isEdit: false,
             appId,
+            groupType: normalizeGroupType(groupType),
             config,
             isSticky,
             appLogo,

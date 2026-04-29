@@ -12,6 +12,9 @@ export class ChatGroupEntity extends BaseEntity {
   @Column({ comment: '分组名称', nullable: true })
   title: string;
 
+  @Column({ comment: '分组类型', default: 'chat' })
+  groupType: string;
+
   @Column({ comment: '应用ID', nullable: true })
   appId: number;
 

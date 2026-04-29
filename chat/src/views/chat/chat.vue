@@ -46,7 +46,7 @@ const getContainerClass = computed(() => {
 })
 
 /* 新增一个对话 */
-async function createNewChatGroup() {
+async function createNewChatGroup(groupType: Chat.GroupType = 'chat') {
   if (isStreamIn.value) {
     ms.info('AI回复中，请稍后再试')
     return
@@ -59,9 +59,9 @@ async function createNewChatGroup() {
       const config = {
         modelInfo,
       }
-      await chatStore.addNewChatGroup(0, config)
+      await chatStore.addNewChatGroup(0, config, undefined, { groupType })
     } else {
-      await chatStore.addNewChatGroup()
+      await chatStore.addNewChatGroup(0, undefined, undefined, { groupType })
     }
     chatStore.setUsingPlugin(null)
 

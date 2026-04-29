@@ -15,6 +15,7 @@ import { dialog } from '@/utils/dialog'
 import { message } from '@/utils/message'
 import { ApplicationTwo, Delete, Down, Unlike, Up } from '@icon-park/vue-next'
 import { computed, inject, ref, watch } from 'vue'
+import { partitionGroupsByType } from '../../groupMode'
 import ListItem from './ListItem.vue'
 
 // 接口定义
@@ -63,12 +64,17 @@ const stickyList = computed(() =>
   )
 )
 
-const historyList = computed(() =>
+const unstickyGroups = computed(() =>
   dataSources.value.filter((item: any) => {
-    if (groupKeyWord.value) return item.title.includes(groupKeyWord.value) && !item.isSticky
-    else return !item.isSticky
+    if (item.isSticky) return false
+    if (groupKeyWord.value) return item.title.includes(groupKeyWord.value)
+    return true
   })
 )
+
+const groupedHistory = computed(() => partitionGroupsByType(unstickyGroups.value))
+const conversationList = computed(() => groupedHistory.value.conversations)
+const projectList = computed(() => groupedHistory.value.projects)
 
 /* 选中切换对话 */
 async function handleSelect(group: Chat.History) {
@@ -165,7 +171,10 @@ async function handleClearConversations() {
     negativeText: t('common.cancel'),
     onPositiveClick: async () => {
       try {
-        await chatStore.delAllGroup()
+        const conversations = [...conversationList.value]
+        for (const group of conversations) {
+          await chatStore.deleteGroup(group)
+        }
       } catch (error) {
         console.error(error)
       }
@@ -313,10 +322,10 @@ const isAppsHovered = ref(false)
           @mouseleave="isHistoryHovered = false"
         >
           <p class="text-xs font-bold">
-            {{ t('chat.historyConversations') }}
-            <span class="ml-1">({{ historyList.length }})</span>
+            对话记录
+            <span class="ml-1">({{ conversationList.length }})</span>
           </p>
-          <div class="relative group" v-if="historyList.length > 0 && isHistoryHovered">
+          <div class="relative group" v-if="conversationList.length > 0 && isHistoryHovered">
             <button
               class="flex items-center justify-center text-xs text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-opacity opacity-70 hover:opacity-100 mr-3"
               @click="handleClearConversations"
@@ -327,9 +336,23 @@ const isAppsHovered = ref(false)
           </div>
         </div>
         <ListItem
-          v-if="historyList.length"
+          v-if="conversationList.length"
           :key="3000 + customKeyId"
-          :data-sources="historyList"
+          :data-sources="conversationList"
+          @select="handleSelect"
+          @delete="handleDelete"
+        />
+
+        <div class="flex items-center justify-between mt-3 mb-1 group">
+          <p class="text-xs font-bold">
+            项目
+            <span class="ml-1">({{ projectList.length }})</span>
+          </p>
+        </div>
+        <ListItem
+          v-if="projectList.length"
+          :key="4000 + customKeyId"
+          :data-sources="projectList"
           @select="handleSelect"
           @delete="handleDelete"
         />

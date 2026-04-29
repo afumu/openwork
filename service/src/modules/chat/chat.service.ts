@@ -124,6 +124,20 @@ export class ChatService {
       .slice(2, 8)}`;
   }
 
+  private isProjectGroup(groupInfo: any) {
+    return groupInfo?.groupType === 'project';
+  }
+
+  private buildNonProjectRuntimeStatus(groupId: number, userId?: number) {
+    return {
+      groupId,
+      mode: 'opensandbox',
+      running: false,
+      status: 'not_project',
+      userId,
+    };
+  }
+
   private logTrace(
     level: 'log' | 'debug' | 'warn' | 'error',
     traceId: string,
@@ -299,6 +313,11 @@ export class ChatService {
       throw new HttpException('缺少对话组ID', HttpStatus.BAD_REQUEST);
     }
 
+    const groupInfo = await this.chatGroupService.getGroupInfoFromId(body.groupId);
+    if (!this.isProjectGroup(groupInfo)) {
+      return this.buildNonProjectRuntimeStatus(body.groupId, req?.user?.id);
+    }
+
     if (!this.openSandboxRuntimeService) {
       return {
         groupId: body.groupId,
@@ -383,6 +402,18 @@ export class ChatService {
       throw new HttpException('缺少对话组ID', HttpStatus.BAD_REQUEST);
     }
 
+    const groupInfo = await this.chatGroupService.getGroupInfoFromId(body.groupId);
+    if (!this.isProjectGroup(groupInfo)) {
+      return {
+        groupId: body.groupId,
+        status: 'not_project',
+        workspaceDir: '/workspace',
+        workspaceFiles: [],
+        workspaceRoot: '/workspace',
+        workspaceRootMode: 'conversation',
+      };
+    }
+
     if (!this.openSandboxRuntimeService) {
       return {
         workspaceDir: '/workspace',
@@ -426,6 +457,11 @@ export class ChatService {
 
     if (!body.path) {
       throw new HttpException('缺少文件路径', HttpStatus.BAD_REQUEST);
+    }
+
+    const groupInfo = await this.chatGroupService.getGroupInfoFromId(body.groupId);
+    if (!this.isProjectGroup(groupInfo)) {
+      throw new HttpException('普通对话没有项目运行时', HttpStatus.BAD_REQUEST);
     }
 
     if (!this.openSandboxRuntimeService) {
@@ -670,6 +706,7 @@ export class ChatService {
     }
 
     const { groupId, usingNetwork, usingDeepThinking, researchMode, usingMcpTool } = options;
+    let activeGroupInfo = groupId ? await this.chatGroupService.getGroupInfoFromId(groupId) : null;
     let sessionId = this.buildSessionId(groupId, null);
 
     const {
@@ -925,7 +962,9 @@ export class ChatService {
           HttpStatus.BAD_REQUEST,
         );
       }
-      const groupInfo = await this.chatGroupService.getGroupInfoFromId(groupId);
+      const groupInfo =
+        activeGroupInfo || (await this.chatGroupService.getGroupInfoFromId(groupId));
+      activeGroupInfo = groupInfo;
 
       // 假设 groupInfo.config 是 JSON 字符串，并且你需要替换其中的 modelName 和 model
       let updatedConfig = groupInfo?.config;
@@ -1024,7 +1063,9 @@ export class ChatService {
     });
 
     if (groupId) {
-      const groupInfo = await this.chatGroupService.getGroupInfoFromId(groupId);
+      const groupInfo =
+        activeGroupInfo || (await this.chatGroupService.getGroupInfoFromId(groupId));
+      activeGroupInfo = groupInfo;
       this.updateChatTitle(groupId, groupInfo, modelType, prompt, req); // Call without await
       await this.chatGroupService.updateTime(groupId);
     }
@@ -1409,7 +1450,9 @@ export class ChatService {
             }
           };
 
-          if (shouldUseOpenSandboxAgent(currentRequestModelKey, useModel)) {
+          if (
+            shouldUseOpenSandboxAgent(currentRequestModelKey, useModel, activeGroupInfo?.groupType)
+          ) {
             if (!this.openSandboxAgentChatService) {
               throw new HttpException(
                 'OpenSandbox agent 服务未初始化',

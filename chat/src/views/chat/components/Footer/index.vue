@@ -22,6 +22,7 @@ import { uploadFile } from '@/api/upload'
 import { message } from '@/utils/message'
 import { computed, inject, nextTick, onMounted, onUnmounted, Ref, ref, watch } from 'vue'
 import GroupChatEntry from '../group-chat/GroupChatEntry.vue'
+import { normalizeGroupType } from '../../groupMode'
 import FilePreview from './components/FilePreview.vue'
 
 interface Emit {
@@ -128,6 +129,16 @@ const activeModelKeyType = computed(() => {
 
 const activeGroupId = computed(() => chatStore.active)
 const activeGroupInfo = computed(() => chatStore.getChatByGroupInfo())
+const selectedGroupType = ref<Chat.GroupType>('chat')
+const activeGroupType = computed(() => normalizeGroupType(activeGroupInfo.value?.groupType))
+
+watch(
+  activeGroupType,
+  value => {
+    selectedGroupType.value = value
+  },
+  { immediate: true }
+)
 const configObj = computed(() => {
   const configString = activeGroupInfo.value?.config
   if (!configString) {
@@ -298,9 +309,9 @@ const activeModelAvatar = computed(() => {
   return String(usingPlugin?.value?.pluginImg || configObj?.value.modelInfo?.modelAvatar || '')
 })
 
-const createNewChatGroup = inject('createNewChatGroup', () =>
-  Promise.resolve()
-) as () => Promise<void>
+const createNewChatGroup = inject('createNewChatGroup', () => Promise.resolve()) as (
+  groupType?: Chat.GroupType
+) => Promise<void>
 
 // 修改计算属性，直接从对话组获取fileUrl
 const fileUrl = computed(() => activeGroupInfo.value?.fileUrl || '')
@@ -322,8 +333,11 @@ const handleSubmit = async (index?: number) => {
     return
   }
 
-  if (chatStore.groupList.length === 0) {
-    await createNewChatGroup()
+  if (
+    chatStore.groupList.length === 0 ||
+    (dataSources.value.length === 0 && activeGroupType.value !== selectedGroupType.value)
+  ) {
+    await createNewChatGroup(selectedGroupType.value)
   }
   chatStore.setStreamIn(true)
   let action = ''
@@ -1416,6 +1430,36 @@ const shouldShowButtonText = computed(() => {
           }"
           :style="{ minHeight: '1.5rem', position: 'relative' }"
         >
+          <div
+            v-if="!props.dataSourcesLength"
+            class="flex w-full items-center justify-center gap-1 px-1 pt-2"
+          >
+            <button
+              type="button"
+              class="px-3 py-1.5 text-sm rounded-full transition-colors"
+              :class="
+                selectedGroupType === 'chat'
+                  ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900'
+                  : 'text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
+              "
+              @click="selectedGroupType = 'chat'"
+            >
+              普通对话
+            </button>
+            <button
+              type="button"
+              class="px-3 py-1.5 text-sm rounded-full transition-colors"
+              :class="
+                selectedGroupType === 'project'
+                  ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900'
+                  : 'text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
+              "
+              @click="selectedGroupType = 'project'"
+            >
+              项目
+            </button>
+          </div>
+
           <!-- 移除多余的内部提示层 -->
 
           <div

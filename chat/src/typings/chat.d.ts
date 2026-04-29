@@ -1,4 +1,6 @@
 declare namespace Chat {
+  type GroupType = 'chat' | 'project'
+
   interface Chat {
     chatId?: number
     content: string
@@ -73,6 +75,7 @@ declare namespace Chat {
     uuid: number
     isSticky: boolean
     config: string
+    groupType?: GroupType
   }
 
   interface ChatState {
@@ -93,6 +96,7 @@ declare namespace Chat {
       isEdit: boolean
       isSticky: boolean
       config: string
+      groupType: GroupType
       createdAt: Date
       updatedAt: Date
       appLogo?: string

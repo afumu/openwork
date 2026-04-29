@@ -19,4 +19,11 @@ export class CreateGroupDto {
     required: false,
   })
   params?: string;
+
+  @ApiProperty({
+    example: 'chat',
+    description: '对话组类型：chat 普通对话，project 项目',
+    required: false,
+  })
+  groupType?: 'chat' | 'project';
 }

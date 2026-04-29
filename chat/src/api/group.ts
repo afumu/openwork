@@ -5,6 +5,7 @@ export function fetchCreateGroupAPI<T>(data?: {
   appId?: number
   modelConfig?: any
   params?: string
+  groupType?: 'chat' | 'project'
 }): Promise<T> {
   return post<T>({
     url: '/group/create',
@@ -29,6 +30,7 @@ export function fetchUpdateGroupAPI<T>(data?: {
   isSticky?: boolean
   config?: string
   fileUrl?: string
+  groupType?: 'chat' | 'project'
 }): Promise<T> {
   return post<T>({
     url: '/group/update',

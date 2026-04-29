@@ -36,7 +36,13 @@ export function buildRuntimeMetadata(input: {
   };
 }
 
-export function shouldUseOpenSandboxAgent(modelConfig: any, requestedModel?: string) {
+export function shouldUseOpenSandboxAgent(
+  modelConfig: any,
+  requestedModel?: string,
+  groupType?: string,
+) {
+  if (groupType !== 'project') return false;
+
   const keyType = Number(modelConfig?.keyType ?? 1);
   const model = String(requestedModel || modelConfig?.model || '')
     .trim()

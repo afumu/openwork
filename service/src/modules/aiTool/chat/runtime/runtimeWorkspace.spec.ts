@@ -25,12 +25,19 @@ describe('OpenSandbox runtime workspace helpers', () => {
     });
   });
 
-  it('routes normal chat models through the runtime regardless of provider format', () => {
-    expect(shouldUseOpenSandboxAgent({ apiFormat: 'openai', keyType: 1 }, 'gpt-4o')).toBe(true);
-    expect(shouldUseOpenSandboxAgent({ apiFormat: 'anthropic', keyType: 1 }, 'claude-3-5')).toBe(
-      true,
+  it('routes only project groups through the OpenSandbox agent', () => {
+    expect(shouldUseOpenSandboxAgent({ apiFormat: 'openai', keyType: 1 }, 'gpt-4o', 'chat')).toBe(
+      false,
     );
-    expect(shouldUseOpenSandboxAgent({ apiFormat: 'openai' }, 'claude_code')).toBe(true);
-    expect(shouldUseOpenSandboxAgent({ apiFormat: 'openai', keyType: 2 }, 'dall-e-3')).toBe(false);
+    expect(
+      shouldUseOpenSandboxAgent({ apiFormat: 'anthropic', keyType: 1 }, 'claude-3-5', 'chat'),
+    ).toBe(false);
+    expect(
+      shouldUseOpenSandboxAgent({ apiFormat: 'openai', keyType: 1 }, 'gpt-4o', 'project'),
+    ).toBe(true);
+    expect(shouldUseOpenSandboxAgent({ apiFormat: 'openai' }, 'claude_code', 'project')).toBe(true);
+    expect(
+      shouldUseOpenSandboxAgent({ apiFormat: 'openai', keyType: 2 }, 'dall-e-3', 'project'),
+    ).toBe(false);
   });
 });

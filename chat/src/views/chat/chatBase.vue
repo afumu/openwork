@@ -41,6 +41,7 @@ import { flushStreamJsonBuffer, parseStreamJsonLines } from '@/utils/streamJsonL
 import { useChat } from './hooks/useChat'
 import { useGroupChat } from './hooks/useGroupChat'
 import { useScroll } from './hooks/useScroll'
+import { isProjectGroup } from './groupMode'
 
 // ============== 接口定义 ==============
 // Type for the form schema field
@@ -247,6 +248,7 @@ const usingPlugin = computed(() => chatStore.currentPlugin)
 const dataSources = computed(() => chatStore.chatList)
 const activeGroupId = computed(() => chatStore.active)
 const activeGroupInfo = computed(() => chatStore.getChatByGroupInfo())
+const isActiveProjectGroup = computed(() => isProjectGroup(activeGroupInfo.value))
 const globalConfig = computed(() => authStore.globalConfig)
 const isHideDefaultPreset = computed(
   () => Number(authStore.globalConfig?.isHideDefaultPreset) === 1
@@ -263,6 +265,7 @@ const shouldShowRuntimeWorkspace = computed(() => {
   return (
     !isMobile.value &&
     Boolean(activeGroupId.value) &&
+    isActiveProjectGroup.value &&
     !useGlobalStore.showAppListComponent &&
     !useGlobalStore.externalLinkDialog
   )
@@ -1866,7 +1869,7 @@ provide('tryParseJson', tryParseJson)
             <!-- WelcomeComponent 放在 Footer 上方 -->
             <template #before-footer>
               <div
-                v-if="dataSources.length && activeGroupId"
+                v-if="dataSources.length && activeGroupId && isActiveProjectGroup"
                 class="conversation-artifacts-entry-wrap"
               >
                 <button
@@ -2015,7 +2018,7 @@ provide('tryParseJson', tryParseJson)
     />
 
     <ArtifactsDrawer
-      v-if="isMobile"
+      v-if="isMobile && isActiveProjectGroup"
       :visible="artifactsDrawerVisible"
       :group-id="Number(activeGroupId || 0)"
       :is-streaming="Boolean(chatStore.isStreamIn)"

@@ -23,6 +23,7 @@ export class ChatGroupService {
   async create(body: CreateGroupDto, req: Request) {
     const { id } = req.user; // 从请求中获取用户ID
     const { appId, modelConfig: bodyModelConfig, params } = body; // 从请求体中提取appId和modelConfig
+    const groupType = this.normalizeGroupType(body.groupType);
 
     const baseModelConfig = await this.modelsService.getBaseConfig();
     let modelConfig = this.buildGroupModelConfig(baseModelConfig, bodyModelConfig);
@@ -55,7 +56,7 @@ export class ChatGroupService {
     modelConfig = JSON.parse(JSON.stringify(modelConfig));
 
     // 初始化创建对话组的参数
-    const groupParams = { title: '新对话', userId: id, appId, params };
+    const groupParams = { title: '新对话', userId: id, appId, params, groupType };
     // const params = { title: 'New chat', userId: id };
 
     // 如果指定了appId，查找并验证应用信息
@@ -126,6 +127,10 @@ export class ChatGroupService {
     });
 
     return newGroup; // 返回新创建的聊天组
+  }
+
+  private normalizeGroupType(groupType?: string) {
+    return groupType === 'project' ? 'project' : 'chat';
   }
 
   private buildGroupModelConfig(baseModelConfig: any, bodyModelConfig: any) {

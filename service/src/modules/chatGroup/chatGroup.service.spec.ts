@@ -59,6 +59,75 @@ describe('ChatGroupService', () => {
     const savedConfig = JSON.parse(save.mock.calls[0][0].config);
     expect(savedConfig.modelInfo.model).toBe('gpt-4o-mini');
     expect(savedConfig.modelInfo.modelName).toBe('GPT-4o Mini');
+    expect(save.mock.calls[0][0].groupType).toBe('chat');
+  });
+
+  it('creates a project group when groupType is project', async () => {
+    const save = jest.fn().mockResolvedValue({ id: 103, groupType: 'project' });
+    const service = new ChatGroupService(
+      { save } as any,
+      { findOne: jest.fn() } as any,
+      {
+        getBaseConfig: jest.fn().mockResolvedValue({
+          modelInfo: {
+            model: 'gpt-4o-mini',
+            modelName: 'GPT-4o Mini',
+          },
+        }),
+        getModelDetailByName: jest.fn().mockResolvedValue({
+          modelName: 'GPT-4o Mini',
+          keyType: 1,
+          deductType: 1,
+          deduct: 1,
+          isFileUpload: 0,
+          isImageUpload: 1,
+          isNetworkSearch: 1,
+          deepThinkingType: 0,
+          isMcpTool: 0,
+        }),
+      } as any,
+    );
+
+    await service.create({ appId: 0, groupType: 'project' } as any, createReq());
+
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        groupType: 'project',
+        title: '新对话',
+        userId: 7,
+      }),
+    );
+  });
+
+  it('falls back to chat for unsupported groupType values', async () => {
+    const save = jest.fn().mockResolvedValue({ id: 104, groupType: 'chat' });
+    const service = new ChatGroupService(
+      { save } as any,
+      { findOne: jest.fn() } as any,
+      {
+        getBaseConfig: jest.fn().mockResolvedValue({
+          modelInfo: {
+            model: 'gpt-4o-mini',
+            modelName: 'GPT-4o Mini',
+          },
+        }),
+        getModelDetailByName: jest.fn().mockResolvedValue({
+          modelName: 'GPT-4o Mini',
+          keyType: 1,
+          deductType: 1,
+          deduct: 1,
+          isFileUpload: 0,
+          isImageUpload: 1,
+          isNetworkSearch: 1,
+          deepThinkingType: 0,
+          isMcpTool: 0,
+        }),
+      } as any,
+    );
+
+    await service.create({ appId: 0, groupType: 'workspace' } as any, createReq());
+
+    expect(save.mock.calls[0][0].groupType).toBe('chat');
   });
 
   it('repairs an inherited stale model by matching the current model display name', async () => {

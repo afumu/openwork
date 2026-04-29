@@ -8,6 +8,7 @@ declare const jest: any;
 function createChatService(
   openAIChatService: any = { chatFree: jest.fn() },
   openSandboxRuntimeService?: any,
+  chatGroupService: any = {},
 ) {
   return new ChatService(
     {} as any,
@@ -20,7 +21,7 @@ function createChatService(
     {} as any,
     {} as any,
     {} as any,
-    {} as any,
+    chatGroupService as any,
     {} as any,
     {} as any,
     undefined as any,
@@ -29,6 +30,32 @@ function createChatService(
 }
 
 describe('ChatService history building', () => {
+  it('does not query OpenSandbox runtime status for ordinary chat groups', async () => {
+    const runtimeService = {
+      getRuntimeStatus: jest.fn(),
+      getOpenWorkProjectStatus: jest.fn(),
+    };
+    const service = createChatService(undefined, runtimeService, {
+      getGroupInfoFromId: jest.fn().mockResolvedValue({
+        groupType: 'chat',
+        id: 128,
+        userId: 42,
+      }),
+    });
+
+    const status = await service.runtimeStatus({ groupId: 128 }, { user: { id: 42 } } as any);
+
+    expect(status).toEqual({
+      groupId: 128,
+      mode: 'opensandbox',
+      running: false,
+      status: 'not_project',
+      userId: 42,
+    });
+    expect(runtimeService.getRuntimeStatus).not.toHaveBeenCalled();
+    expect(runtimeService.getOpenWorkProjectStatus).not.toHaveBeenCalled();
+  });
+
   it('returns an OpenSandbox preview URL based on the OpenWork dev server port', async () => {
     const runtimeService = {
       getOpenWorkProjectStatus: jest.fn().mockResolvedValue({
@@ -51,7 +78,13 @@ describe('ChatService history building', () => {
         workspaceRoot: '/workspace',
       }),
     };
-    const service = createChatService(undefined, runtimeService);
+    const service = createChatService(undefined, runtimeService, {
+      getGroupInfoFromId: jest.fn().mockResolvedValue({
+        groupType: 'project',
+        id: 128,
+        userId: 42,
+      }),
+    });
 
     const status = await service.runtimeStatus({ groupId: 128 }, { user: { id: 42 } } as any);
 
