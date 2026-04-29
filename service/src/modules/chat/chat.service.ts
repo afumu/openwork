@@ -67,6 +67,33 @@ type ActiveChatAbortEntry = {
   traceId: string;
 };
 
+function buildOpenSandboxPreviewUrl(baseUrl: string | undefined, port: number | undefined) {
+  if (!baseUrl || !port || !Number.isFinite(port)) return undefined;
+
+  try {
+    const url = new URL(baseUrl);
+    const match = url.pathname.match(/^(.*\/proxy\/)\d+(\/.*)?$/);
+    if (!match) return undefined;
+    url.pathname = `${match[1]}${port}${match[2] || ''}`;
+    url.search = '';
+    url.hash = '';
+    return url.toString().replace(/\/$/g, '');
+  } catch (_error) {
+    return undefined;
+  }
+}
+
+function resolveOpenWorkDevPort(projectStatus: any) {
+  const port = Number(
+    projectStatus?.runtime?.dev?.port || projectStatus?.dev?.port || projectStatus?.devPort,
+  );
+  return Number.isFinite(port) && port > 0 ? port : undefined;
+}
+
+function isOpenWorkDevRunning(projectStatus: any) {
+  return Boolean(projectStatus?.runtime?.dev?.running || projectStatus?.dev?.running);
+}
+
 @Injectable()
 export class ChatService {
   private readonly activeChatAbortControllers = new Map<string, Set<ActiveChatAbortEntry>>();
@@ -315,9 +342,36 @@ export class ChatService {
       };
     }
 
+    let openWorkProjectStatus: any = null;
+    try {
+      openWorkProjectStatus = await this.openSandboxRuntimeService.getOpenWorkProjectStatus({
+        groupId: body.groupId,
+        traceId,
+        userId: req.user.id,
+      });
+    } catch (error) {
+      this.logTrace('warn', traceId, 'OpenSandbox runtime OpenWork 项目状态读取失败', {
+        error: serializeErrorForLog(error),
+        groupId: body.groupId,
+        userId: req.user.id,
+      });
+    }
+
+    const previewPort = resolveOpenWorkDevPort(openWorkProjectStatus);
+    const previewUrl = buildOpenSandboxPreviewUrl(runtime.baseUrl, previewPort);
+
     return {
       ...runtime,
       containerName: runtime.sandboxId,
+      openWork: openWorkProjectStatus || undefined,
+      preview: previewUrl
+        ? {
+            path: `/proxy/${previewPort}`,
+            port: previewPort,
+            running: isOpenWorkDevRunning(openWorkProjectStatus),
+            url: previewUrl,
+          }
+        : undefined,
       running: runtime.status === 'Running',
     };
   }

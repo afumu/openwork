@@ -58,6 +58,31 @@ export type RuntimeWorkspaceReadResult = {
   updatedAt: string;
 };
 
+export type OpenWorkProjectStatus = {
+  ok?: boolean;
+  name?: string;
+  template?: string;
+  workspace?: string;
+  devPort?: number;
+  dev?: {
+    command?: string[];
+    logFile?: string;
+    pid?: number;
+    port?: number;
+    running?: boolean;
+  };
+  runtime?: {
+    dev?: {
+      command?: string[];
+      logFile?: string;
+      pid?: number;
+      port?: number;
+      running?: boolean;
+    };
+  };
+  error?: string;
+};
+
 export type OpenSandboxRuntimeConfig = {
   apiKey?: string;
   bridgePort: number;

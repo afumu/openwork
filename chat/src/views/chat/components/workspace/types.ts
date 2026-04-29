@@ -61,6 +61,29 @@ export interface RuntimeStatusPayload {
   groupId: number
   hostPort?: number
   mode: 'docker' | 'direct' | 'opensandbox'
+  openWork?: {
+    devPort?: number
+    name?: string
+    ok?: boolean
+    template?: string
+    workspace?: string
+    runtime?: {
+      dev?: {
+        port?: number
+        running?: boolean
+      }
+    }
+    dev?: {
+      port?: number
+      running?: boolean
+    }
+  }
+  preview?: {
+    path?: string
+    port: number
+    running?: boolean
+    url: string
+  }
   running?: boolean
   status?: string
   userId?: number

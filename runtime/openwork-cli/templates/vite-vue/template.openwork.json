@@ -20,9 +20,9 @@
   },
   "commands": {
     "install": ["npm", "install"],
-    "dev": ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "<%= port %>"],
+    "dev": ["openwork", "vite-proxy", "--public-port", "<%= port %>", "--target-port", "<%= proxyTargetPort %>", "--base", "/proxy/<%= port %>/", "--", "npm", "run", "dev", "--", "--host", "127.0.0.1", "--port", "<%= proxyTargetPort %>"],
     "build": ["npm", "run", "build"],
-    "start": ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "<%= port %>"],
+    "start": ["openwork", "vite-proxy", "--public-port", "<%= port %>", "--target-port", "<%= proxyTargetPort %>", "--base", "/proxy/<%= port %>/", "--", "npm", "run", "preview", "--", "--host", "127.0.0.1", "--port", "<%= proxyTargetPort %>"],
     "validate": ["npm", "run", "typecheck"]
   }
 }

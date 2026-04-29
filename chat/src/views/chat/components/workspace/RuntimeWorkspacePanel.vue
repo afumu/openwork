@@ -55,6 +55,7 @@ const pollTimer = ref<number | null>(null)
 const showRuntimeInfo = ref(false)
 const toolbarMessage = ref('')
 const toolbarMessageTimer = ref<number | null>(null)
+const previewManualReloadKey = ref(0)
 
 const workspaceFiles = computed(() => flattenArtifactManifestFiles(manifest.value))
 
@@ -83,6 +84,8 @@ const runtimeModeText = computed(() => {
   if (runtimeStatus.value.mode === 'opensandbox') return 'OpenSandbox'
   return runtimeStatus.value.mode === 'docker' ? 'Docker' : 'Direct'
 })
+
+const appPreview = computed(() => runtimeStatus.value?.preview || null)
 
 const fileCountText = computed(() => workspaceFiles.value.length || props.artifactCount || 0)
 
@@ -249,12 +252,14 @@ function unwrapRuntimeStatus(payload: any): RuntimeStatusPayload | null {
 }
 
 function handleOpenSelectedPreview() {
-  if (!selectedFile.value) return
+  if (!selectedFile.value && !appPreview.value?.url) return
+  if (appPreview.value?.url) previewManualReloadKey.value += 1
   activeMainTab.value = 'preview'
 }
 
 async function refreshWorkspace() {
   await Promise.all([loadArtifacts(true), loadRuntimeStatus(true)])
+  previewManualReloadKey.value += 1
   showToolbarMessage('工作区已刷新')
 }
 
@@ -274,9 +279,14 @@ function copySelectedFile() {
 }
 
 function openSelectedFile() {
+  if (activeMainTab.value === 'preview' && appPreview.value?.url) {
+    window.open(appPreview.value.url, '_blank', 'noopener')
+    return
+  }
+
   const target = resolveWorkspaceOpenTarget(selectedFile.value)
   if (!target) {
-    showToolbarMessage('请先选择一个文件')
+    showToolbarMessage(appPreview.value?.url ? '请先切换到预览' : '请先选择一个文件')
     return
   }
 
@@ -454,6 +464,10 @@ onBeforeUnmount(() => {
                 <RuntimePreviewPane
                   v-show="activeMainTab === 'preview'"
                   class="h-full rounded-none border-0"
+                  :app-preview-port="appPreview?.port"
+                  :app-preview-reload-key="previewManualReloadKey"
+                  :app-preview-running="appPreview?.running"
+                  :app-preview-url="appPreview?.url"
                   :file="selectedFile"
                 />
                 <RuntimeCodeEditor

@@ -7,6 +7,7 @@ import type {
   OpenSandboxRuntimeConfig,
   OpenSandboxSandbox,
   OpenSandboxVolume,
+  OpenWorkProjectStatus,
   RuntimeDescriptor,
   RuntimeWorkspaceManifest,
   RuntimeWorkspaceReadResult,
@@ -367,6 +368,34 @@ console.log('${WORKSPACE_JSON_PREFIX}' + JSON.stringify({
 `;
 }
 
+function buildOpenWorkProjectStatusScript() {
+  return `
+const childProcess = require('child_process');
+const root = process.argv[1] || '/workspace';
+function parseJsonOutput(output) {
+  try {
+    return JSON.parse(String(output || '').trim());
+  } catch (_error) {
+    return null;
+  }
+}
+let payload = null;
+try {
+  const stdout = childProcess.execFileSync('openwork', ['status', '--workspace', root, '--json'], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  payload = parseJsonOutput(stdout);
+} catch (error) {
+  payload = parseJsonOutput(error?.stdout) || {
+    ok: false,
+    error: error?.message || 'openwork status failed'
+  };
+}
+console.log('${WORKSPACE_JSON_PREFIX}' + JSON.stringify(payload));
+`;
+}
+
 @Injectable()
 export class OpenSandboxRuntimeService {
   private readonly logger = new Logger(OpenSandboxRuntimeService.name);
@@ -544,6 +573,20 @@ export class OpenSandboxRuntimeService {
       runtime.sandbox,
       buildReadWorkspaceFileScript(),
       [runtime.descriptor.workspaceRoot, relativePath, String(WORKSPACE_MAX_READ_BYTES)],
+      15,
+    );
+  }
+
+  async getOpenWorkProjectStatus(
+    input: RuntimeStatusInput,
+  ): Promise<OpenWorkProjectStatus | null> {
+    const runtime = await this.connectExistingRuntime(input);
+    if (!runtime) return null;
+
+    return this.runWorkspaceNodeCommand<OpenWorkProjectStatus>(
+      runtime.sandbox,
+      buildOpenWorkProjectStatusScript(),
+      [runtime.descriptor.workspaceRoot],
       15,
     );
   }

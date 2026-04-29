@@ -91,7 +91,7 @@ async function runChat(token, groupId, templateName) {
     '请按真实命令执行，不要只描述步骤：',
     '1. 先运行 openwork templates --json 确认模板存在。',
     `2. 如果 /workspace 非空，先安全清理 /workspace 下旧项目文件，包括隐藏文件，但不要删除 /workspace 本身。`,
-    `3. 运行 openwork init ${appName} --template ${templateName} --install --dev --force --json。`,
+    `3. 运行 openwork init ${appName} --template ${templateName} --install --dev --force --here --json。`,
     '4. 运行 openwork status --json。',
     '5. 访问 http://127.0.0.1:9000 验证 dev server。',
     '6. 运行 openwork build --json。',
@@ -147,6 +147,54 @@ async function runtimeStatus(token, groupId) {
     method: 'POST',
   });
   return payload.data;
+}
+
+async function verifyPreviewUrl(runtime, templateName) {
+  const url = runtime?.preview?.url;
+  if (!url) throw new Error(`Runtime status did not include preview.url for ${templateName}`);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30_000);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    const text = await response.text();
+    if (!response.ok || !text.trim()) {
+      throw new Error(`Preview URL failed for ${templateName}: HTTP ${response.status}`);
+    }
+    const assets = [];
+    if (templateName === 'vite-react') {
+      assets.push('@vite/client', '@react-refresh', 'src/main.tsx');
+    } else if (templateName === 'vite-vue' || templateName === 'vite-vue-admin') {
+      assets.push('@vite/client', 'src/main.ts');
+    }
+
+    const assetResults = [];
+    for (const assetPath of assets) {
+      const assetUrl = `${url.replace(/\/+$/g, '')}/${assetPath}`;
+      const assetResponse = await fetch(assetUrl, { signal: controller.signal });
+      const assetText = await assetResponse.text();
+      if (!assetResponse.ok || !assetText.trim()) {
+        throw new Error(
+          `Preview asset failed for ${templateName}: HTTP ${assetResponse.status} ${assetUrl}`,
+        );
+      }
+      assetResults.push({
+        path: assetPath,
+        status: assetResponse.status,
+        url: assetUrl,
+      });
+    }
+
+    return {
+      assets: assetResults,
+      length: text.length,
+      preview: text.slice(0, 160),
+      status: response.status,
+      url,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function docker(args) {
@@ -210,13 +258,15 @@ for (const templateName of targets) {
   console.log(`\n=== ${templateName} / group ${groupId} ===`);
   const chat = await runChat(token, groupId, templateName);
   const runtime = await runtimeStatus(token, groupId);
+  const preview = await verifyPreviewUrl(runtime, templateName);
   const verification = await verifyContainer(groupId, templateName);
-  const result = { chat, groupId, runtime, templateName, verification };
+  const result = { chat, groupId, preview, runtime, templateName, verification };
   results.push(result);
   console.log(JSON.stringify({
     groupId,
     templateName,
     runtime,
+    preview,
     container: verification.container,
     devPort: verification.status.devPort,
     buildOk: verification.build.ok,

@@ -49,6 +49,7 @@ export function buildRuntimeInfoSummary(input: {
   const lines = [`运行状态：${status}`, `运行模式：${mode}`]
 
   if (input.runtimeStatus?.containerName) lines.push(`容器：${input.runtimeStatus.containerName}`)
+  if (input.runtimeStatus?.preview?.url) lines.push(`预览地址：${input.runtimeStatus.preview.url}`)
   if (input.workspaceDir) lines.push(`工作目录：${input.workspaceDir}`)
   if (input.selectedPath) lines.push(`当前文件：${input.selectedPath}`)
   lines.push(`文件数量：${input.fileCount}`)

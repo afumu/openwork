@@ -30,8 +30,9 @@ async function runOpenwork(args, options = {}) {
 }
 
 describe('openwork init', () => {
-  it('initializes native-static into an empty workspace', async () => {
+  it('initializes native-static into a named child directory by default', async () => {
     const workspace = await createTempWorkspace();
+    const targetWorkspace = path.join(workspace, 'demo-site');
 
     try {
       const result = await runOpenwork([
@@ -48,16 +49,16 @@ describe('openwork init', () => {
       const payload = JSON.parse(result.stdout);
       assert.equal(payload.ok, true);
       assert.equal(payload.template, 'native-static');
-      assert.equal(payload.workspace, workspace);
+      assert.equal(payload.workspace, targetWorkspace);
 
-      const html = await readFile(path.join(workspace, 'index.html'), 'utf8');
+      const html = await readFile(path.join(targetWorkspace, 'index.html'), 'utf8');
       assert.match(html, /demo-site/);
 
-      const agents = await readFile(path.join(workspace, 'AGENTS.md'), 'utf8');
+      const agents = await readFile(path.join(targetWorkspace, 'AGENTS.md'), 'utf8');
       assert.match(agents, /Native Static/);
 
       const projectConfig = JSON.parse(
-        await readFile(path.join(workspace, '.openwork/project.json'), 'utf8'),
+        await readFile(path.join(targetWorkspace, '.openwork/project.json'), 'utf8'),
       );
       assert.equal(projectConfig.name, 'demo-site');
       assert.equal(projectConfig.template, 'native-static');
@@ -69,6 +70,32 @@ describe('openwork init', () => {
         '--bind',
         '0.0.0.0',
       ]);
+    } finally {
+      await rm(workspace, { force: true, recursive: true });
+    }
+  });
+
+  it('can initialize into the workspace root when --here is set', async () => {
+    const workspace = await createTempWorkspace();
+
+    try {
+      const result = await runOpenwork([
+        'init',
+        'demo-site',
+        '--template',
+        'native-static',
+        '--workspace',
+        workspace,
+        '--here',
+        '--json',
+      ]);
+
+      assert.equal(result.code, 0);
+      const payload = JSON.parse(result.stdout);
+      assert.equal(payload.workspace, workspace);
+
+      const html = await readFile(path.join(workspace, 'index.html'), 'utf8');
+      assert.match(html, /demo-site/);
     } finally {
       await rm(workspace, { force: true, recursive: true });
     }
@@ -86,6 +113,7 @@ describe('openwork init', () => {
         'native-static',
         '--workspace',
         workspace,
+        '--here',
         '--json',
       ]);
 
@@ -109,6 +137,7 @@ describe('openwork init', () => {
         'native-static',
         '--workspace',
         workspace,
+        '--here',
         '--port',
         '5050',
         '--json',
@@ -141,11 +170,12 @@ describe('openwork init', () => {
           'init',
           'demo-site',
           '--template',
-          'native-static',
-          '--workspace',
-          workspace,
-          '--dev',
-          '--json',
+        'native-static',
+        '--workspace',
+        workspace,
+        '--here',
+        '--dev',
+        '--json',
         ],
         { timeout: 2000 },
       );

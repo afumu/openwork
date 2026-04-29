@@ -5,7 +5,10 @@ declare const expect: any;
 declare const it: any;
 declare const jest: any;
 
-function createChatService(openAIChatService: any = { chatFree: jest.fn() }) {
+function createChatService(
+  openAIChatService: any = { chatFree: jest.fn() },
+  openSandboxRuntimeService?: any,
+) {
   return new ChatService(
     {} as any,
     {} as any,
@@ -20,10 +23,52 @@ function createChatService(openAIChatService: any = { chatFree: jest.fn() }) {
     {} as any,
     {} as any,
     {} as any,
+    undefined as any,
+    openSandboxRuntimeService,
   );
 }
 
 describe('ChatService history building', () => {
+  it('returns an OpenSandbox preview URL based on the OpenWork dev server port', async () => {
+    const runtimeService = {
+      getOpenWorkProjectStatus: jest.fn().mockResolvedValue({
+        dev: {
+          port: 9000,
+          running: true,
+        },
+        devPort: 9000,
+        ok: true,
+      }),
+      getRuntimeStatus: jest.fn().mockResolvedValue({
+        baseUrl: 'http://127.0.0.1:57212/proxy/8787',
+        endpointHeaders: { 'x-open-sandbox-token': 'signed' },
+        groupId: 128,
+        mode: 'opensandbox',
+        sandboxId: 'sbx-preview',
+        status: 'Running',
+        userId: 42,
+        workspaceDir: '/workspace',
+        workspaceRoot: '/workspace',
+      }),
+    };
+    const service = createChatService(undefined, runtimeService);
+
+    const status = await service.runtimeStatus({ groupId: 128 }, { user: { id: 42 } } as any);
+
+    expect(runtimeService.getOpenWorkProjectStatus).toHaveBeenCalledWith(
+      expect.objectContaining({
+        groupId: 128,
+        userId: 42,
+      }),
+    );
+    expect(status.preview).toEqual({
+      path: '/proxy/9000',
+      port: 9000,
+      running: true,
+      url: 'http://127.0.0.1:57212/proxy/9000',
+    });
+  });
+
   it('keeps earlier user messages when interrupted assistant logs are empty or transient errors', async () => {
     const service = createChatService();
     const chatLogService = {

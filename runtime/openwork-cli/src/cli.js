@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { toCliError } from './errors.js';
 import { formatError, printJson, printText } from './output.js';
 import { writeProjectConfig } from './projectConfig.js';
@@ -10,6 +11,7 @@ import {
   validateTemplateParams,
 } from './templateRegistry.js';
 import { OpenWorkCliError } from './errors.js';
+import { runViteProxy } from './viteProxy.js';
 
 function hasFlag(args, flag) {
   return args.includes(flag);
@@ -46,6 +48,7 @@ function collectTemplateParams(args) {
     '--install',
     '--dev',
     '--force',
+    '--here',
     '--json',
   ]);
   const params = {};
@@ -118,7 +121,9 @@ export async function runCli(argv = process.argv.slice(2)) {
 
     if (command === 'init') {
       const templateName = readOption(args, '--template', '-t');
-      const workspace = readOption(args, '--workspace') || process.env.OPENWORK_WORKSPACE || process.cwd();
+      const workspaceRoot =
+        readOption(args, '--workspace') || process.env.OPENWORK_WORKSPACE || process.cwd();
+      const here = hasFlag(args, '--here');
       const force = hasFlag(args, '--force');
       const install = hasFlag(args, '--install');
       const dev = hasFlag(args, '--dev');
@@ -136,6 +141,8 @@ export async function runCli(argv = process.argv.slice(2)) {
         devPort: params.port || template.devPort || 9000,
         packageName: (params.appName || projectName || 'openwork-app').toLowerCase(),
       };
+      context.proxyTargetPort = Number(context.devPort) + 1;
+      const workspace = here ? workspaceRoot : path.resolve(workspaceRoot, context.appName);
 
       await renderTemplateToWorkspace({
         context,
@@ -197,6 +204,11 @@ export async function runCli(argv = process.argv.slice(2)) {
       if (json) printJson(payload);
       else printText(`${payload.template} in ${workspace}`);
       return payload;
+    }
+
+    if (command === 'vite-proxy') {
+      await runViteProxy(args);
+      return { ok: true };
     }
 
     throw new OpenWorkCliError('UNKNOWN_COMMAND', `Unknown command: ${command || '(empty)'}`);

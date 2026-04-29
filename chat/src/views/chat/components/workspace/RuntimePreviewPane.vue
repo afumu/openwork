@@ -3,11 +3,15 @@ import { useAppStore } from '@/store'
 import { getArtifactMarkdownTheme } from '@/utils/artifactPreview'
 import { MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/preview.css'
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { resolvePreviewKind } from './artifactWorkspace'
 import type { ArtifactReadResult } from './types'
 
 const props = defineProps<{
+  appPreviewPort?: number
+  appPreviewReloadKey?: number | string
+  appPreviewRunning?: boolean
+  appPreviewUrl?: string
   file: ArtifactReadResult | null
 }>()
 
@@ -21,8 +25,11 @@ const isDarkTheme = computed(() => {
 })
 
 const markdownPreviewTheme = computed(() => getArtifactMarkdownTheme(isDarkTheme.value))
+const previewFrameNonce = ref(0)
+const previewReloadTimers: number[] = []
 
 const previewKind = computed(() => {
+  if (props.appPreviewUrl) return 'app'
   if (!props.file) return 'empty'
   return resolvePreviewKind(props.file.path, props.file.type)
 })
@@ -43,14 +50,80 @@ const imageSource = computed(() => {
   if (props.file.content.startsWith('data:')) return props.file.content
   return `data:${props.file.type || 'image/*'};base64,${props.file.content}`
 })
+
+const previewFrameKey = computed(() =>
+  [props.appPreviewUrl || '', props.appPreviewRunning ? 'running' : 'idle', previewFrameNonce.value].join(':')
+)
+
+function clearPreviewReloadTimers() {
+  while (previewReloadTimers.length) {
+    const timer = previewReloadTimers.pop()
+    if (timer) window.clearTimeout(timer)
+  }
+}
+
+function schedulePreviewReload() {
+  clearPreviewReloadTimers()
+  if (!props.appPreviewUrl) return
+
+  previewFrameNonce.value += 1
+  if (!props.appPreviewRunning) return
+
+  for (const delay of [1200, 3500]) {
+    previewReloadTimers.push(
+      window.setTimeout(() => {
+        previewFrameNonce.value += 1
+      }, delay)
+    )
+  }
+}
+
+watch(
+  () => [props.appPreviewUrl, props.appPreviewRunning, props.appPreviewReloadKey] as const,
+  schedulePreviewReload,
+  { immediate: true }
+)
+
+onBeforeUnmount(() => {
+  clearPreviewReloadTimers()
+})
 </script>
 
 <template>
   <section
     class="runtime-preview-pane flex h-full min-h-0 flex-col overflow-hidden bg-white text-zinc-900"
   >
+    <template v-if="appPreviewUrl">
+      <header
+        class="flex min-h-[46px] items-center justify-between gap-3 border-b border-zinc-200 px-4"
+      >
+        <div class="min-w-0">
+          <div class="truncate text-sm font-semibold text-zinc-900">应用预览</div>
+          <div class="truncate text-xs text-zinc-500">
+            {{ appPreviewRunning ? '运行中' : '等待服务启动' }}
+            <span v-if="appPreviewPort"> · {{ appPreviewPort }}</span>
+          </div>
+        </div>
+        <a
+          class="shrink-0 rounded-md border border-zinc-200 px-2.5 py-1 text-xs font-semibold text-zinc-600 hover:bg-zinc-50"
+          :href="appPreviewUrl"
+          target="_blank"
+          rel="noopener"
+        >
+          打开
+        </a>
+      </header>
+
+      <iframe
+        :key="previewFrameKey"
+        class="block min-h-0 flex-1 border-0 bg-white"
+        :src="appPreviewUrl"
+        sandbox="allow-forms allow-modals allow-popups allow-same-origin allow-scripts"
+      />
+    </template>
+
     <div
-      v-if="!file"
+      v-else-if="!file"
       class="flex h-full items-center justify-center px-8 text-center text-sm text-zinc-500"
     >
       <div>

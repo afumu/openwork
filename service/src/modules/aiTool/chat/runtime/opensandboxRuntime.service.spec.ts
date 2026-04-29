@@ -410,4 +410,51 @@ describe('OpenSandboxRuntimeService', () => {
       updatedAt: '2026-04-29T00:00:00.000Z',
     });
   });
+
+  it('reads OpenWork project status from the existing workspace', async () => {
+    const sandbox = createSandbox('sbx-existing');
+    sandbox.commands.run.mockResolvedValueOnce({
+      exitCode: 0,
+      logs: {
+        stdout: [
+          {
+            text: 'OPENWORK_WORKSPACE_JSON:{"ok":true,"name":"todo-app","template":"vite-react","workspace":"/workspace","devPort":9000,"runtime":{"dev":{"running":true,"port":9000,"pid":123}}}',
+            timestamp: 1777380000000,
+          },
+        ],
+      },
+    });
+    const client = {
+      connectSandbox: jest.fn().mockResolvedValue(sandbox),
+      findSandboxByMetadata: jest.fn().mockResolvedValue({ id: 'sbx-existing' }),
+    };
+
+    const service = new OpenSandboxRuntimeService(client as any);
+    const status = await service.getOpenWorkProjectStatus({
+      groupId: 128,
+      traceId: 'trace-1',
+      userId: 42,
+    });
+
+    expect(sandbox.commands.run).toHaveBeenCalledWith(
+      expect.stringContaining('openwork'),
+      expect.objectContaining({
+        workingDirectory: '/',
+      }),
+    );
+    expect(status).toEqual({
+      devPort: 9000,
+      name: 'todo-app',
+      ok: true,
+      runtime: {
+        dev: {
+          pid: 123,
+          port: 9000,
+          running: true,
+        },
+      },
+      template: 'vite-react',
+      workspace: '/workspace',
+    });
+  });
 });
