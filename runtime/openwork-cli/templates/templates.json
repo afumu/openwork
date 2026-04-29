@@ -5,6 +5,17 @@
       "name": "native-static",
       "title": "原生静态网站",
       "description": "适合 HTML/CSS/JS 单页、小游戏、静态页面",
+      "useCases": [
+        "single-page static pages",
+        "small browser games",
+        "simple demos without a build step"
+      ],
+      "avoidWhen": [
+        "the app needs routing, component state, package dependencies, SSR, or backend APIs"
+      ],
+      "examples": [
+        "用户要一个纯 HTML 页面、小游戏、单文件演示或不要框架"
+      ],
       "location": "./native-static",
       "tags": ["html", "static", "game"],
       "devPort": 5000
@@ -13,6 +24,19 @@
       "name": "vite-react",
       "title": "React SPA",
       "description": "适合 React 单页应用、交互页面和轻量工具",
+      "useCases": [
+        "React single-page apps",
+        "interactive tools",
+        "component-heavy frontends without SSR"
+      ],
+      "avoidWhen": [
+        "the user explicitly asks for Vue",
+        "SEO or server rendering is a core requirement",
+        "the app is primarily an admin dashboard"
+      ],
+      "examples": [
+        "用户要一个 React 应用、交互工具、可视化小应用或前端原型"
+      ],
       "location": "./vite-react",
       "tags": ["react", "vite", "spa"],
       "devPort": 5000
@@ -21,6 +45,19 @@
       "name": "vite-vue",
       "title": "Vue SPA",
       "description": "适合 Vue 3 单页应用和轻量前端项目",
+      "useCases": [
+        "Vue 3 single-page apps",
+        "lightweight frontend projects",
+        "Vue prototypes without server rendering"
+      ],
+      "avoidWhen": [
+        "the user asks for React or Next.js",
+        "the app is clearly an admin dashboard",
+        "SEO or SSR is a core requirement"
+      ],
+      "examples": [
+        "用户要一个 Vue 前端应用、Vue 小工具或 Vue 交互页面"
+      ],
       "location": "./vite-vue",
       "tags": ["vue", "vite", "spa"],
       "devPort": 5000
@@ -29,6 +66,21 @@
       "name": "vite-vue-admin",
       "title": "Vue 管理后台",
       "description": "适合后台系统、表格、表单、登录和权限页面",
+      "useCases": [
+        "admin dashboards",
+        "CRM and operations tools",
+        "table-heavy business systems",
+        "login, filters, forms, permissions, and metrics views"
+      ],
+      "avoidWhen": [
+        "public marketing sites",
+        "content-heavy SEO sites",
+        "simple static pages",
+        "React-specific requests"
+      ],
+      "examples": [
+        "用户要一个管理后台、CRM、数据看板或表格系统"
+      ],
       "location": "./vite-vue-admin",
       "tags": ["vue", "admin", "dashboard"],
       "devPort": 5000
@@ -37,6 +89,20 @@
       "name": "nextjs",
       "title": "Next.js 全栈应用",
       "description": "适合 React 全栈、SSR、SEO 和多页面应用",
+      "useCases": [
+        "SEO-sensitive websites",
+        "React full-stack apps",
+        "server-rendered or multi-page products",
+        "apps needing API routes or metadata control"
+      ],
+      "avoidWhen": [
+        "the user asks for Vue",
+        "the request is a small static demo",
+        "the app does not benefit from SSR or server features"
+      ],
+      "examples": [
+        "用户要官网、博客、SEO 页面、全栈 React 应用或多页面产品"
+      ],
       "location": "./nextjs",
       "tags": ["react", "nextjs", "ssr"],
       "devPort": 5000

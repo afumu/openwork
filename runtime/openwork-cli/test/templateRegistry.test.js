@@ -19,6 +19,20 @@ describe('template registry', () => {
     );
   });
 
+  it('prints model-facing selection guidance with template use cases', async () => {
+    const result = await execFileAsync(process.execPath, [cliPath, 'templates', '--json'], {
+      cwd: path.resolve('.'),
+    });
+    const payload = JSON.parse(result.stdout);
+    const adminTemplate = payload.templates.find(template => template.name === 'vite-vue-admin');
+
+    assert.match(payload.selectionGuide, /choose the closest template/i);
+    assert.match(payload.selectionGuide, /ask a short clarification/i);
+    assert.ok(adminTemplate.useCases.includes('admin dashboards'));
+    assert.ok(adminTemplate.avoidWhen.includes('public marketing sites'));
+    assert.ok(adminTemplate.examples.includes('用户要一个管理后台、CRM、数据看板或表格系统'));
+  });
+
   it('does not expose an internal recommendation command', async () => {
     let error;
 

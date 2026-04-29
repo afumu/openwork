@@ -102,11 +102,15 @@ JSON 输出：
 ```json
 {
   "ok": true,
+  "selectionGuide": "Read the user request, choose the closest template from useCases/examples/avoidWhen, and ask a short clarification if the fit is unclear. Do not invent template names.",
   "templates": [
     {
       "name": "vite-vue-admin",
       "title": "Vue 管理后台",
       "description": "适合后台系统、表格、表单、登录和权限页面",
+      "useCases": ["admin dashboards", "CRM and operations tools"],
+      "avoidWhen": ["public marketing sites", "React-specific requests"],
+      "examples": ["用户要一个管理后台、CRM、数据看板或表格系统"],
       "tags": ["vue", "admin", "dashboard"],
       "devPort": 5000
     }
@@ -357,7 +361,7 @@ runtime 镜像中提供全局说明文件，例如 `/opt/openwork-cli/AGENTS.md`
 When creating a new app in an empty workspace:
 1. Run `openwork templates --json`.
 2. Read the template descriptions and choose the closest template based on the user request.
-3. If the template choice is unclear, ask the user a short clarification instead of guessing through CLI rules.
+3. Use `useCases`, `avoidWhen`, and `examples` to choose. If the template choice is unclear, ask the user a short clarification instead of guessing through CLI rules.
 4. Run `openwork init --template <name> --install --dev`.
 5. Continue editing files under `/workspace`.
 6. Run `openwork build` or template validate command before reporting completion.
@@ -426,6 +430,7 @@ PROCESS_NOT_FOUND
 ## 验收标准
 
 - `openwork templates --json` 能列出内置模板。
+- `openwork templates --json` 输出模型可读的 `selectionGuide`、`useCases`、`avoidWhen` 和 `examples`。
 - 空 `/workspace` 下执行 `openwork init --template native-static --json` 会生成项目和 `.openwork/project.json`。
 - 非空 `/workspace` 下不带 `--force` 执行 init 会失败并返回 `WORKSPACE_NOT_EMPTY` 或 `FILE_CONFLICT`。
 - `openwork dev/build/start` 能读取 `.openwork/project.json` 并执行对应命令。

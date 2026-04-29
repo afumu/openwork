@@ -41,7 +41,7 @@
 
 - [ ] **Step 1: Write failing tests**
 
-Test `loadTemplates()` lists bundled templates and the CLI does not expose an internal recommendation command.
+Test `loadTemplates()` lists bundled templates, `templates --json` prints model-facing selection guidance, and the CLI does not expose an internal recommendation command.
 
 - [ ] **Step 2: Run red test**
 
@@ -50,7 +50,7 @@ Expected: fails because package and modules do not exist.
 
 - [ ] **Step 3: Implement registry and CLI shell**
 
-Implement package metadata, executable bin, output helpers, error helpers, template loading, and the `templates` command.
+Implement package metadata, executable bin, output helpers, error helpers, template loading, rich template metadata, and the `templates` command.
 
 - [ ] **Step 4: Run green test**
 

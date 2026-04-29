@@ -89,10 +89,24 @@ export async function runCli(argv = process.argv.slice(2)) {
       const registry = await loadTemplates();
       const payload = {
         ok: true,
-        templates: registry.templates.map(({ name, title, description, tags, devPort }) => ({
+        selectionGuide:
+          'Read the user request, choose the closest template from useCases/examples/avoidWhen, and ask a short clarification if the fit is unclear. Do not invent template names.',
+        templates: registry.templates.map(({
           name,
           title,
           description,
+          useCases,
+          avoidWhen,
+          examples,
+          tags,
+          devPort,
+        }) => ({
+          name,
+          title,
+          description,
+          useCases,
+          avoidWhen,
+          examples,
           tags,
           devPort,
         })),
