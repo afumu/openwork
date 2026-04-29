@@ -117,6 +117,7 @@ export function readOpenSandboxRuntimeConfig(): OpenSandboxRuntimeConfig {
     bridgePort: Number(process.env.OPENWORK_AGENT_BRIDGE_PORT || 8787),
     cpu: process.env.OPENWORK_SANDBOX_CPU || '2',
     domain: process.env.OPEN_SANDBOX_DOMAIN || process.env.SANDBOX_DOMAIN || 'localhost:8080',
+    execdPort: Number(process.env.OPENWORK_SANDBOX_EXECD_PORT || 44772),
     image:
       process.env.OPENWORK_AGENT_RUNTIME_IMAGE ||
       process.env.SANDBOX_IMAGE ||

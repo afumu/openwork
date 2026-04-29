@@ -2,6 +2,7 @@ export type RuntimeTerminalServerMessage =
   | {
       containerName?: string
       cwd?: string
+      shell?: string
       type: 'ready'
     }
   | {
@@ -50,6 +51,7 @@ export function parseRuntimeTerminalServerMessage(value: string): RuntimeTermina
     return {
       containerName: typeof parsed.containerName === 'string' ? parsed.containerName : undefined,
       cwd: typeof parsed.cwd === 'string' ? parsed.cwd : undefined,
+      shell: typeof parsed.shell === 'string' ? parsed.shell : undefined,
       type: 'ready',
     }
   }

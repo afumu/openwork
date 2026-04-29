@@ -37,6 +37,20 @@ test('parseRuntimeTerminalServerMessage accepts terminal output messages', () =>
   })
 })
 
+test('parseRuntimeTerminalServerMessage accepts terminal ready metadata', () => {
+  assert.deepEqual(
+    parseRuntimeTerminalServerMessage(
+      '{"type":"ready","containerName":"sbx-1","cwd":"/workspace","shell":"/bin/bash"}'
+    ),
+    {
+      containerName: 'sbx-1',
+      cwd: '/workspace',
+      shell: '/bin/bash',
+      type: 'ready',
+    }
+  )
+})
+
 test('parseRuntimeTerminalServerMessage ignores invalid server messages', () => {
   assert.equal(parseRuntimeTerminalServerMessage('not json'), null)
   assert.equal(parseRuntimeTerminalServerMessage('{"type":"output"}'), null)

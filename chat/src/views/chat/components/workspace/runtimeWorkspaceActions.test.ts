@@ -56,13 +56,13 @@ test('buildRuntimeInfoSummary formats runtime and workspace context', () => {
         status: 'running',
       },
       selectedPath: 'index.html',
-      workspaceDir: '/workspace/conversations/10',
+      workspaceDir: '/workspace',
     }),
     [
       '运行状态：running',
       '运行模式：Docker',
       '容器：openwork-user-1-group-10',
-      '工作目录：/workspace/conversations/10',
+      '工作目录：/workspace',
       '当前文件：index.html',
       '文件数量：2',
     ].join('\n')

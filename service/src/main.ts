@@ -16,6 +16,7 @@ import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/allExceptions.filter';
 import { resolveEnvFilePath } from './common/utils/resolveEnvFilePath';
 import { registerRequestBodyParsers } from './common/middleware/requestBodyParser';
+import { RuntimeTerminalGateway } from './modules/aiTool/chat/runtime/runtimeTerminalGateway';
 
 Dotenv.config({ path: resolveEnvFilePath({ runtimeDir: __dirname }) });
 
@@ -178,6 +179,7 @@ async function bootstrap() {
     console.log('======================================\n');
   });
 
+  app.get(RuntimeTerminalGateway, { strict: false }).bind(server);
   server.timeout = 5 * 60 * 1000;
 }
 

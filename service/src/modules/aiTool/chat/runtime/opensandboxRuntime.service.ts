@@ -7,9 +7,17 @@ import type {
   OpenSandboxRuntimeConfig,
   OpenSandboxSandbox,
   RuntimeDescriptor,
+  RuntimeWorkspaceManifest,
+  RuntimeWorkspaceReadResult,
   RuntimeStatusInput,
+  RuntimeTerminalTarget,
 } from './opensandboxRuntime.types';
 import { buildRuntimeMetadata, resolveRuntimeWorkspace } from './runtimeWorkspace';
+
+const WORKSPACE_JSON_PREFIX = 'OPENWORK_WORKSPACE_JSON:';
+const WORKSPACE_MAX_FILES = 2000;
+const WORKSPACE_MAX_READ_BYTES = 1024 * 1024;
+const TERMINAL_SHELL = '/bin/bash';
 
 function stripTrailingSlash(value: string) {
   return value.replace(/\/+$/g, '');
@@ -34,6 +42,60 @@ function shellQuote(value: string) {
 
 function buildEnvSignature(env: Record<string, string>) {
   return createHash('sha256').update(JSON.stringify(env)).digest('hex');
+}
+
+function commandOutputToString(log?: any[] | string) {
+  if (Array.isArray(log)) {
+    return log
+      .map(item => {
+        if (typeof item === 'string') return item;
+        if (item?.text !== undefined) return String(item.text);
+        if (item?.content !== undefined) return String(item.content);
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+  return log || '';
+}
+
+function parseWorkspaceCommandJson<T>(stdout: string): T {
+  const line = stdout
+    .split(/\r?\n/g)
+    .reverse()
+    .find(item => item.startsWith(WORKSPACE_JSON_PREFIX));
+
+  if (!line) {
+    throw new HttpException('OpenSandbox 工作区命令未返回有效数据', HttpStatus.BAD_GATEWAY);
+  }
+
+  try {
+    return JSON.parse(line.slice(WORKSPACE_JSON_PREFIX.length)) as T;
+  } catch (error) {
+    throw new HttpException(
+      `OpenSandbox 工作区返回解析失败: ${error instanceof Error ? error.message : String(error)}`,
+      HttpStatus.BAD_GATEWAY,
+    );
+  }
+}
+
+function normalizeWorkspaceRelativePath(pathValue: string, workspaceRoot: string) {
+  const normalized = String(pathValue || '')
+    .trim()
+    .replace(/\\/g, '/');
+  const root = stripTrailingSlash(workspaceRoot);
+  const relativePath =
+    normalized === root
+      ? ''
+      : normalized.startsWith(`${root}/`)
+      ? normalized.slice(root.length + 1)
+      : normalized.replace(/^\.?\//, '');
+
+  if (!relativePath || relativePath.startsWith('/') || relativePath.split('/').includes('..')) {
+    throw new HttpException('文件路径不在工作区内', HttpStatus.BAD_REQUEST);
+  }
+
+  return relativePath;
 }
 
 function normalizeModelApiFormat(apiFormat?: string) {
@@ -73,6 +135,137 @@ function buildModelRuntimeEnv(input: EnsureRuntimeInput) {
       OPENAI_MODEL: input.model,
     }),
   };
+}
+
+function buildWorkspaceTypeDetectorScript() {
+  return `
+const ext = filePath.split('?')[0].split('/').pop().toLowerCase().split('.').pop() || '';
+const mime = {
+  css: 'css',
+  gif: 'image/gif',
+  htm: 'html',
+  html: 'html',
+  jpeg: 'image/jpeg',
+  jpg: 'image/jpeg',
+  js: 'javascript',
+  json: 'json',
+  jsx: 'javascript',
+  md: 'markdown',
+  png: 'image/png',
+  py: 'python',
+  svg: 'image/svg+xml',
+  ts: 'typescript',
+  tsx: 'typescript',
+  txt: 'text',
+  vue: 'vue',
+  webp: 'image/webp',
+  yaml: 'yaml',
+  yml: 'yaml'
+};
+return mime[ext] || 'text';
+`;
+}
+
+function buildListWorkspaceScript() {
+  return `
+const fs = require('fs');
+const path = require('path');
+const root = path.resolve(process.argv[1] || '/workspace');
+const maxFiles = Number(process.argv[2] || ${WORKSPACE_MAX_FILES});
+const ignored = new Set(['.git', 'node_modules', '.pnpm-store', '.cache']);
+const files = [];
+function detectType(filePath) {
+  ${buildWorkspaceTypeDetectorScript()}
+}
+function pushFile(abs, rel, stat) {
+  files.push({
+    name: path.basename(rel),
+    path: rel.split(path.sep).join('/'),
+    size: stat.size,
+    type: detectType(rel),
+    updatedAt: stat.mtime.toISOString(),
+    runId: null,
+    source: 'workspace_root'
+  });
+}
+function walk(dir) {
+  if (files.length >= maxFiles) return;
+  let entries = [];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch (_error) {
+    return;
+  }
+  entries.sort((left, right) => left.name.localeCompare(right.name));
+  for (const entry of entries) {
+    if (files.length >= maxFiles) return;
+    if (ignored.has(entry.name)) continue;
+    const abs = path.join(dir, entry.name);
+    let stat;
+    try {
+      stat = fs.lstatSync(abs);
+    } catch (_error) {
+      continue;
+    }
+    if (stat.isSymbolicLink()) continue;
+    const rel = path.relative(root, abs);
+    if (!rel) continue;
+    if (stat.isDirectory()) {
+      walk(abs);
+    } else if (stat.isFile()) {
+      pushFile(abs, rel, stat);
+    }
+  }
+}
+fs.mkdirSync(root, { recursive: true });
+walk(root);
+console.log('${WORKSPACE_JSON_PREFIX}' + JSON.stringify({
+  truncated: files.length >= maxFiles,
+  workspaceFiles: files
+}));
+`;
+}
+
+function buildReadWorkspaceFileScript() {
+  return `
+const fs = require('fs');
+const path = require('path');
+const root = path.resolve(process.argv[1] || '/workspace');
+const rel = String(process.argv[2] || '').replace(/^\\.?\\/+/, '');
+const maxBytes = Number(process.argv[3] || ${WORKSPACE_MAX_READ_BYTES});
+function detectType(filePath) {
+  ${buildWorkspaceTypeDetectorScript()}
+}
+const target = path.resolve(root, rel);
+const rootWithSep = root.endsWith(path.sep) ? root : root + path.sep;
+if (!rel || (target !== root && !target.startsWith(rootWithSep))) {
+  throw new Error('Path escapes workspace');
+}
+const realRoot = fs.realpathSync(root);
+const realTarget = fs.realpathSync(target);
+const realRootWithSep = realRoot.endsWith(path.sep) ? realRoot : realRoot + path.sep;
+if (realTarget !== realRoot && !realTarget.startsWith(realRootWithSep)) {
+  throw new Error('Path escapes workspace');
+}
+const stat = fs.statSync(target);
+if (!stat.isFile()) {
+  throw new Error('Path is not a file');
+}
+const buffer = fs.readFileSync(target);
+const truncated = buffer.length > maxBytes;
+const slice = truncated ? buffer.subarray(0, maxBytes) : buffer;
+const type = detectType(rel);
+const content = type.startsWith('image/') ? slice.toString('base64') : slice.toString('utf8');
+console.log('${WORKSPACE_JSON_PREFIX}' + JSON.stringify({
+  content,
+  path: rel.split(path.sep).join('/'),
+  run_id: null,
+  size: stat.size,
+  truncated,
+  type,
+  updatedAt: stat.mtime.toISOString()
+}));
+`;
 }
 
 @Injectable()
@@ -150,6 +343,77 @@ export class OpenSandboxRuntimeService {
     return this.buildDescriptor(sandbox, input, config);
   }
 
+  async getRuntimeTerminalTarget(input: RuntimeStatusInput): Promise<RuntimeTerminalTarget | null> {
+    const config = this.getConfig();
+    const metadata = buildRuntimeMetadata({ groupId: input.groupId, userId: input.userId });
+    const existing = await this.client.findSandboxByMetadata(metadata);
+
+    if (!existing) {
+      return null;
+    }
+
+    const workspace = resolveRuntimeWorkspace({
+      groupId: input.groupId,
+      workspaceRoot: config.workspaceRoot,
+    });
+    const sandbox = await this.client.connectSandbox(existing.id);
+    const endpoint = await sandbox.getEndpoint(config.execdPort);
+    const protocol = sandbox.connectionConfig?.protocol || 'http';
+
+    return {
+      endpointHeaders: endpoint.headers || {},
+      execdBaseUrl: `${protocol}://${stripTrailingSlash(endpoint.endpoint)}`,
+      groupId: input.groupId,
+      mode: 'opensandbox',
+      sandboxId: sandbox.id,
+      shell: TERMINAL_SHELL,
+      userId: input.userId,
+      workspacePath: workspace.workspacePath,
+    };
+  }
+
+  async listWorkspaceFiles(input: RuntimeStatusInput): Promise<RuntimeWorkspaceManifest | null> {
+    const runtime = await this.connectExistingRuntime(input);
+    if (!runtime) return null;
+
+    const payload = await this.runWorkspaceNodeCommand<{
+      truncated?: boolean;
+      workspaceFiles?: RuntimeWorkspaceManifest['workspaceFiles'];
+    }>(
+      runtime.sandbox,
+      buildListWorkspaceScript(),
+      [runtime.descriptor.workspaceRoot, String(WORKSPACE_MAX_FILES)],
+      15,
+    );
+
+    return {
+      truncated: Boolean(payload.truncated),
+      workspaceDir: runtime.descriptor.workspaceDir,
+      workspaceFiles: payload.workspaceFiles || [],
+      workspaceRoot: runtime.descriptor.workspaceRoot,
+      workspaceRootMode: 'conversation',
+    };
+  }
+
+  async readWorkspaceFile(
+    input: RuntimeStatusInput & { path: string },
+  ): Promise<RuntimeWorkspaceReadResult | null> {
+    const runtime = await this.connectExistingRuntime(input);
+    if (!runtime) return null;
+
+    const relativePath = normalizeWorkspaceRelativePath(
+      input.path,
+      runtime.descriptor.workspaceRoot,
+    );
+
+    return this.runWorkspaceNodeCommand<RuntimeWorkspaceReadResult>(
+      runtime.sandbox,
+      buildReadWorkspaceFileScript(),
+      [runtime.descriptor.workspaceRoot, relativePath, String(WORKSPACE_MAX_READ_BYTES)],
+      15,
+    );
+  }
+
   async stopAgent(descriptor: RuntimeDescriptor) {
     await fetch(getBridgeUrl(descriptor, 'stop'), {
       headers: descriptor.endpointHeaders,
@@ -181,6 +445,52 @@ export class OpenSandboxRuntimeService {
       workspaceDir: workspace.workspaceDir,
       workspaceRoot: workspace.workspaceRoot,
     };
+  }
+
+  private async connectExistingRuntime(input: RuntimeStatusInput) {
+    const config = this.getConfig();
+    const metadata = buildRuntimeMetadata({ groupId: input.groupId, userId: input.userId });
+    const existing = await this.client.findSandboxByMetadata(metadata);
+
+    if (!existing) {
+      return null;
+    }
+
+    const sandbox = await this.client.connectSandbox(existing.id);
+    const descriptor = await this.buildDescriptor(sandbox, input, config);
+    return { descriptor, sandbox };
+  }
+
+  private async runWorkspaceNodeCommand<T>(
+    sandbox: OpenSandboxSandbox,
+    script: string,
+    args: string[],
+    timeoutSeconds: number,
+  ): Promise<T> {
+    if (!sandbox.commands?.run) {
+      throw new HttpException(
+        'OpenSandbox sandbox 不支持工作区文件命令',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+
+    const command = [`node -e ${shellQuote(script)}`, ...args.map(shellQuote)].join(' ');
+    const result = await sandbox.commands.run(command, {
+      timeoutSeconds,
+      workingDirectory: '/',
+    });
+    const stderr = commandOutputToString(result?.logs?.stderr);
+
+    if (result?.error || result?.exitCode) {
+      throw new HttpException(
+        `OpenSandbox 工作区命令失败: ${result.error || stderr || `exitCode=${result.exitCode}`}`,
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
+    const stdout = commandOutputToString(result?.logs?.stdout);
+    const output = stdout || commandOutputToString(result?.result);
+    return parseWorkspaceCommandJson<T>(output);
   }
 
   private async ensureBridgeProcess(
@@ -241,9 +551,7 @@ export class OpenSandboxRuntimeService {
     });
 
     if (result?.error || result?.exitCode) {
-      const stderr = Array.isArray(result.logs?.stderr)
-        ? result.logs?.stderr.join('\n')
-        : result.logs?.stderr || '';
+      const stderr = commandOutputToString(result.logs?.stderr);
       throw new HttpException(
         `OpenSandbox bridge 启动失败: ${result.error || stderr || `exitCode=${result.exitCode}`}`,
         HttpStatus.SERVICE_UNAVAILABLE,

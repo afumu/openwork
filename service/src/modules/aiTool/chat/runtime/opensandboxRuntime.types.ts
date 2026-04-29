@@ -12,16 +12,57 @@ export type RuntimeDescriptor = {
   status?: string;
 };
 
+export type RuntimeTerminalTarget = {
+  mode: 'opensandbox';
+  sandboxId: string;
+  execdBaseUrl: string;
+  endpointHeaders?: Record<string, string>;
+  groupId: number | string;
+  shell: string;
+  userId: number;
+  workspacePath: string;
+};
+
 export type RuntimeWorkspace = {
   workspaceRoot: string;
   workspaceDir: string;
   workspacePath: string;
 };
 
+export type RuntimeWorkspaceFileItem = {
+  name: string;
+  path: string;
+  preview?: string;
+  size: number;
+  type: string;
+  updatedAt: string;
+  runId: string | null;
+  source: 'workspace_root';
+};
+
+export type RuntimeWorkspaceManifest = {
+  workspaceDir: string;
+  workspaceRoot: string;
+  workspaceRootMode: 'conversation';
+  workspaceFiles: RuntimeWorkspaceFileItem[];
+  truncated?: boolean;
+};
+
+export type RuntimeWorkspaceReadResult = {
+  content: string;
+  path: string;
+  run_id: string | null;
+  size: number;
+  truncated: boolean;
+  type: string;
+  updatedAt: string;
+};
+
 export type OpenSandboxRuntimeConfig = {
   apiKey?: string;
   bridgePort: number;
   domain: string;
+  execdPort: number;
   image: string;
   timeoutSeconds: number;
   useServerProxy: boolean;
@@ -87,9 +128,10 @@ export type OpenSandboxSandbox = {
       error?: string;
       exitCode?: number;
       logs?: {
-        stderr?: string[] | string;
-        stdout?: string[] | string;
+        stderr?: any[] | string;
+        stdout?: any[] | string;
       };
+      result?: any[];
     }>;
   };
   connectionConfig?: { protocol?: string };

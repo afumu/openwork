@@ -90,7 +90,7 @@ service/src/modules/aiTool/chat/runtime/
 
 ```ts
 type RuntimeDescriptor = {
-  mode: 'opensandbox';
+  mode: "opensandbox";
   sandboxId: string;
   baseUrl: string;
   endpointHeaders?: Record<string, string>;
@@ -177,12 +177,26 @@ bridge 需要把 Claude Code、Codex 等输出归一成 OpenWork 事件。前端
 
 ## 终端与命令执行
 
-当前前端终端交互暂时保留。OpenSandbox 接入后建议分两步恢复后端能力：
+当前前端终端交互已开始接入 OpenSandbox。
 
-1. 第一版使用 OpenSandbox command SSE 或 bridge command session，支持命令执行和日志流展示。
-2. 第二版在 bridge 内实现 PTY WebSocket，`service` 只做鉴权和转发。
+现行终端路径：
 
-这样终端能力不会阻塞主聊天和 agent run 改造。
+```text
+chat xterm
+  -> service /api/openwork/runtime/terminal WebSocket
+     -> 校验 token + groupId
+     -> 定位 userId + groupId 对应 sandbox
+     -> OpenSandbox execd POST /pty
+     -> OpenSandbox execd /pty/:session_id/ws
+```
+
+`service` 不把 OpenSandbox endpoint 暴露给前端，只做鉴权、runtime 定位和 PTY WebSocket 协议转发。前端继续使用已有 xterm 面板，发送 `input`、`resize` 等 JSON 消息；`service` 转换为 execd PTY 的 binary stdin 与 JSON resize 帧，再把 execd stdout/stderr 转回前端可消费的 `output` 消息。
+
+当前 OpenSandbox execd 的 `/pty` 请求只支持传入 `cwd`。execd 内部启动 Bash PTY 并继承容器内 execd 进程环境，因此终端行为接近宿主机执行 `docker exec -it <container> /bin/bash`：进入的是同一个 sandbox 容器、继承容器环境、交互输入输出走 PTY。OpenWork 侧固定把终端工作目录传为运行时 workspace，并在 ready 消息里返回 `cwd` 和 `/bin/bash` shell 信息，前端据此展示当前连接位置。
+
+因为 execd 启动的是不读取 profile/rc 的 Bash，OpenWork 会在 PTY 打开后注入一段交互终端 bootstrap：补齐 `TERM=xterm-256color`、`COLORTERM=truecolor`，提供 `ll`、`la`、`l` 函数，并给 `clear` 增加 ANSI fallback。初始化输出由 `service` 转发层吞掉，不展示给用户。
+
+后续命令按钮或非交互命令仍可补充 OpenSandbox command SSE 或 bridge command session；交互式终端优先走 execd PTY。
 
 ## Workspace 与持久化
 
@@ -192,10 +206,10 @@ bridge 需要把 Claude Code、Codex 等输出归一成 OpenWork 事件。前端
 /workspace
 ```
 
-每个对话组 workspace：
+当前对话 workspace：
 
 ```text
-/workspace/conversations/<groupId>
+/workspace
 ```
 
 需要在 OpenSandbox 创建 sandbox 时确定持久化策略：
@@ -215,6 +229,7 @@ OPEN_SANDBOX_DOMAIN
 OPEN_SANDBOX_API_KEY
 OPENWORK_AGENT_RUNTIME_IMAGE
 OPENWORK_AGENT_BRIDGE_PORT=8787
+OPENWORK_SANDBOX_EXECD_PORT=44772
 OPENWORK_WORKSPACE_ROOT=/workspace
 OPENWORK_SANDBOX_TIMEOUT_SECONDS=3600
 OPENWORK_SANDBOX_CPU=2

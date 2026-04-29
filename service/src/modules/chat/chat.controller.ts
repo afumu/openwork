@@ -6,6 +6,7 @@ import { Body, Controller, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { ChatProcessDto } from './dto/chatProcess.dto';
 import { RuntimeStatusDto } from './dto/runtimeStatus.dto';
+import { RuntimeWorkspaceListDto, RuntimeWorkspaceReadDto } from './dto/runtimeWorkspace.dto';
 import { StopChatDto } from './dto/stopChat.dto';
 
 @ApiTags('openwork')
@@ -35,6 +36,22 @@ export class ChatController {
   @ApiBearerAuth()
   runtimeStatus(@Body() body: RuntimeStatusDto, @Req() req: Request) {
     return this.chatService.runtimeStatus(body, req);
+  }
+
+  @Post('runtime/workspace/list')
+  @ApiOperation({ summary: '查询当前对话运行时工作区文件' })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  runtimeWorkspaceList(@Body() body: RuntimeWorkspaceListDto, @Req() req: Request) {
+    return this.chatService.runtimeWorkspaceList(body, req);
+  }
+
+  @Post('runtime/workspace/read')
+  @ApiOperation({ summary: '读取当前对话运行时工作区文件' })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  runtimeWorkspaceRead(@Body() body: RuntimeWorkspaceReadDto, @Req() req: Request) {
+    return this.chatService.runtimeWorkspaceRead(body, req);
   }
 
   @Post('tts-process')

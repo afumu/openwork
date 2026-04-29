@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import { fetchArtifactListAPI, fetchArtifactReadAPI } from '@/api/artifacts'
-import { fetchRuntimeStatusAPI } from '@/api/runtime'
+import {
+  fetchRuntimeStatusAPI,
+  fetchRuntimeWorkspaceListAPI,
+  fetchRuntimeWorkspaceReadAPI,
+} from '@/api/runtime'
 import { copyText } from '@/utils/format'
 import { shouldRefreshSelectedArtifact } from '@/utils/artifactPreview'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
@@ -77,6 +80,7 @@ const runtimeStatusText = computed(() => {
 
 const runtimeModeText = computed(() => {
   if (!runtimeStatus.value?.mode) return 'runtime'
+  if (runtimeStatus.value.mode === 'opensandbox') return 'OpenSandbox'
   return runtimeStatus.value.mode === 'docker' ? 'Docker' : 'Direct'
 })
 
@@ -150,7 +154,7 @@ async function loadArtifacts(showLoading = true) {
   loadError.value = ''
 
   try {
-    const res: any = await fetchArtifactListAPI({ groupId: props.groupId })
+    const res: any = await fetchRuntimeWorkspaceListAPI({ groupId: props.groupId })
     const nextManifest = unwrapArtifactPayload<ArtifactManifest>(res)
     if (!nextManifest) throw new Error('文件列表返回格式不正确')
 
@@ -205,7 +209,7 @@ async function loadRuntimeStatus(showLoading = true) {
 
 async function loadFile(
   path: string,
-  runId?: string | null,
+  _runId?: string | null,
   options: { preserveCurrentContent?: boolean } = {}
 ) {
   if (!props.groupId || !path) return
@@ -222,10 +226,9 @@ async function loadFile(
   loadError.value = ''
 
   try {
-    const res: any = await fetchArtifactReadAPI({
+    const res: any = await fetchRuntimeWorkspaceReadAPI({
       groupId: props.groupId,
       path,
-      runId: runId || undefined,
     })
     const nextReadResult = unwrapArtifactPayload<ArtifactReadResult>(res)
     if (!nextReadResult) throw new Error('文件内容返回格式不正确')

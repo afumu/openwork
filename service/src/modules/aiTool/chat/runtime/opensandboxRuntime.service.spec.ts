@@ -70,7 +70,7 @@ describe('OpenSandboxRuntimeService', () => {
           ANTHROPIC_AUTH_TOKEN: 'sk-ant-test',
           ANTHROPIC_BASE_URL: 'https://anthropic.example.com',
           ANTHROPIC_MODEL: 'claude-test',
-          CLAUDE_BRIDGE_CWD: '/workspace/conversations/128',
+          CLAUDE_BRIDGE_CWD: '/workspace',
           CLAUDE_BRIDGE_PORT: '8787',
           IS_SANDBOX: '1',
           OPENWORK_MODEL_API_FORMAT: 'anthropic',
@@ -93,7 +93,7 @@ describe('OpenSandboxRuntimeService', () => {
           ANTHROPIC_AUTH_TOKEN: 'sk-ant-test',
           ANTHROPIC_BASE_URL: 'https://anthropic.example.com',
           ANTHROPIC_MODEL: 'claude-test',
-          CLAUDE_BRIDGE_CWD: '/workspace/conversations/128',
+          CLAUDE_BRIDGE_CWD: '/workspace',
           CLAUDE_BRIDGE_PORT: '8787',
           OPENWORK_MODEL_API_FORMAT: 'anthropic',
         }),
@@ -109,7 +109,7 @@ describe('OpenSandboxRuntimeService', () => {
         sandboxId: 'sbx-created',
         status: 'Running',
         userId: 42,
-        workspaceDir: 'conversations/128',
+        workspaceDir: '/workspace',
         workspaceRoot: '/workspace',
       }),
     );
@@ -145,6 +145,55 @@ describe('OpenSandboxRuntimeService', () => {
     expect(client.createSandbox).not.toHaveBeenCalled();
     expect(sandbox.commands.run).toHaveBeenCalled();
     expect(descriptor.sandboxId).toBe('sbx-existing');
+  });
+
+  it('returns an execd PTY terminal target for an existing runtime without starting the bridge', async () => {
+    process.env = {
+      ...originalEnv,
+      OPEN_SANDBOX_DOMAIN: 'http://localhost:8080',
+      OPENWORK_AGENT_RUNTIME_IMAGE: 'openwork-agent-runtime:test',
+      OPENWORK_SANDBOX_EXECD_PORT: '44772',
+    };
+    const sandbox = createSandbox('sbx-existing');
+    sandbox.getEndpoint.mockImplementation(async (port: number) => {
+      if (port === 44772) {
+        return {
+          endpoint: '127.0.0.1:44772',
+          headers: { 'x-open-sandbox-token': 'execd-signed' },
+        };
+      }
+      return {
+        endpoint: '127.0.0.1:8787',
+        headers: { 'x-open-sandbox-token': 'bridge-signed' },
+      };
+    });
+    const client = {
+      connectSandbox: jest.fn().mockResolvedValue(sandbox),
+      createSandbox: jest.fn(),
+      findSandboxByMetadata: jest.fn().mockResolvedValue({ id: 'sbx-existing' }),
+    };
+
+    const service = new OpenSandboxRuntimeService(client as any);
+    const target = await service.getRuntimeTerminalTarget({
+      groupId: 128,
+      traceId: 'trace-1',
+      userId: 42,
+    });
+
+    expect(client.connectSandbox).toHaveBeenCalledWith('sbx-existing');
+    expect(client.createSandbox).not.toHaveBeenCalled();
+    expect(sandbox.commands.run).not.toHaveBeenCalled();
+    expect(sandbox.getEndpoint).toHaveBeenCalledWith(44772);
+    expect(target).toEqual({
+      endpointHeaders: { 'x-open-sandbox-token': 'execd-signed' },
+      execdBaseUrl: 'http://127.0.0.1:44772',
+      groupId: 128,
+      mode: 'opensandbox',
+      sandboxId: 'sbx-existing',
+      shell: '/bin/bash',
+      userId: 42,
+      workspacePath: '/workspace',
+    });
   });
 
   it('passes OpenAI-compatible model config without reading Anthropic env fallbacks', async () => {
@@ -199,5 +248,103 @@ describe('OpenSandboxRuntimeService', () => {
         }),
       }),
     );
+  });
+
+  it('lists files from the existing OpenSandbox workspace', async () => {
+    process.env = {
+      ...originalEnv,
+      OPEN_SANDBOX_DOMAIN: 'http://localhost:8080',
+      OPENWORK_AGENT_RUNTIME_IMAGE: 'openwork-agent-runtime:test',
+    };
+    const sandbox = createSandbox('sbx-existing');
+    sandbox.commands.run.mockResolvedValueOnce({
+      exitCode: 0,
+      logs: {
+        stdout: [
+          {
+            text: 'OPENWORK_WORKSPACE_JSON:{"workspaceFiles":[{"name":"README.md","path":"README.md","size":12,"type":"markdown","updatedAt":"2026-04-29T00:00:00.000Z","runId":null,"source":"workspace_root"}]}',
+            timestamp: 1777380000000,
+          },
+        ],
+      },
+    });
+    const client = {
+      connectSandbox: jest.fn().mockResolvedValue(sandbox),
+      findSandboxByMetadata: jest.fn().mockResolvedValue({ id: 'sbx-existing' }),
+    };
+
+    const service = new OpenSandboxRuntimeService(client as any);
+    const manifest = await service.listWorkspaceFiles({
+      groupId: 128,
+      traceId: 'trace-1',
+      userId: 42,
+    });
+
+    expect(client.connectSandbox).toHaveBeenCalledWith('sbx-existing');
+    expect(sandbox.commands.run).toHaveBeenCalledWith(
+      expect.stringContaining("'/workspace'"),
+      expect.objectContaining({
+        workingDirectory: '/',
+      }),
+    );
+    expect(manifest).toEqual({
+      truncated: false,
+      workspaceDir: '/workspace',
+      workspaceFiles: [
+        {
+          name: 'README.md',
+          path: 'README.md',
+          runId: null,
+          size: 12,
+          source: 'workspace_root',
+          type: 'markdown',
+          updatedAt: '2026-04-29T00:00:00.000Z',
+        },
+      ],
+      workspaceRoot: '/workspace',
+      workspaceRootMode: 'conversation',
+    });
+  });
+
+  it('reads a file from the existing OpenSandbox workspace', async () => {
+    const sandbox = createSandbox('sbx-existing');
+    sandbox.commands.run.mockResolvedValueOnce({
+      exitCode: 0,
+      logs: { stdout: [] },
+      result: [
+        {
+          text: 'OPENWORK_WORKSPACE_JSON:{"content":"hello","path":"README.md","run_id":null,"size":5,"truncated":false,"type":"markdown","updatedAt":"2026-04-29T00:00:00.000Z"}',
+          timestamp: 1777380000000,
+        },
+      ],
+    });
+    const client = {
+      connectSandbox: jest.fn().mockResolvedValue(sandbox),
+      findSandboxByMetadata: jest.fn().mockResolvedValue({ id: 'sbx-existing' }),
+    };
+
+    const service = new OpenSandboxRuntimeService(client as any);
+    const file = await service.readWorkspaceFile({
+      groupId: 128,
+      path: '/workspace/README.md',
+      traceId: 'trace-1',
+      userId: 42,
+    });
+
+    expect(sandbox.commands.run).toHaveBeenCalledWith(
+      expect.stringContaining("'README.md'"),
+      expect.objectContaining({
+        workingDirectory: '/',
+      }),
+    );
+    expect(file).toEqual({
+      content: 'hello',
+      path: 'README.md',
+      run_id: null,
+      size: 5,
+      truncated: false,
+      type: 'markdown',
+      updatedAt: '2026-04-29T00:00:00.000Z',
+    });
   });
 });

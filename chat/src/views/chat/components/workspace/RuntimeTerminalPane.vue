@@ -24,6 +24,7 @@ const props = defineProps<{
 const terminalEl = ref<HTMLDivElement | null>(null)
 const currentContainerName = ref('')
 const currentCwd = ref('')
+const currentShell = ref('')
 const terminalStatus = ref<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected')
 let terminal: Terminal | null = null
 let terminalSocket: WebSocket | null = null
@@ -197,7 +198,9 @@ function connectTerminal() {
     if (message.type === 'ready') {
       currentContainerName.value = message.containerName || ''
       currentCwd.value = message.cwd || ''
+      currentShell.value = message.shell || ''
       terminalStatus.value = 'connected'
+      terminal?.clear()
       return
     }
 
@@ -243,6 +246,7 @@ watch(
   () => {
     currentContainerName.value = ''
     currentCwd.value = ''
+    currentShell.value = ''
     void nextTick(() => {
       renderInitialTerminal()
       connectTerminal()
@@ -275,6 +279,12 @@ onBeforeUnmount(() => {
       <div class="flex items-center gap-3 text-zinc-500">
         <span v-if="currentContainerName" class="max-w-[220px] truncate">
           容器 {{ currentContainerName }}
+        </span>
+        <span v-if="currentCwd" class="max-w-[180px] truncate">
+          {{ currentCwd }}
+        </span>
+        <span v-if="currentShell" class="max-w-[120px] truncate">
+          {{ currentShell }}
         </span>
         <span>{{ statusLabel }}</span>
         <button class="terminal-action" type="button" @click="clearTerminal">清理</button>

@@ -4,6 +4,7 @@ import { OpenAIChatService } from '../aiTool/chat/chat.service';
 import { OpenSandboxAgentChatService } from '../aiTool/chat/runtime/opensandboxAgentChat.service';
 import { OpenSandboxClientService } from '../aiTool/chat/runtime/opensandboxClient';
 import { OpenSandboxRuntimeService } from '../aiTool/chat/runtime/opensandboxRuntime.service';
+import { RuntimeTerminalGateway } from '../aiTool/chat/runtime/runtimeTerminalGateway';
 import { NetSearchService } from '../aiTool/search/netSearch.service';
 import { AppEntity } from '../app/app.entity';
 import { AppService } from '../app/app.service';
@@ -83,6 +84,7 @@ import { ChatService } from './chat.service';
     OpenSandboxAgentChatService,
     OpenSandboxClientService,
     OpenSandboxRuntimeService,
+    RuntimeTerminalGateway,
     NetSearchService,
     AppService,
   ],

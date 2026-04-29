@@ -15,12 +15,11 @@ export function resolveRuntimeWorkspace(input: {
   workspaceRoot?: string;
 }): RuntimeWorkspace {
   const workspaceRoot = `/${trimSlashes(input.workspaceRoot || '/workspace')}`;
-  const workspaceDir = `conversations/${encodeURIComponent(String(input.groupId))}`;
 
   return {
-    workspaceDir,
+    workspaceDir: workspaceRoot,
     workspaceRoot,
-    workspacePath: `${workspaceRoot}/${workspaceDir}`,
+    workspacePath: workspaceRoot,
   };
 }
 

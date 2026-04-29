@@ -60,7 +60,7 @@ export interface RuntimeStatusPayload {
   containerName?: string
   groupId: number
   hostPort?: number
-  mode: 'docker' | 'direct'
+  mode: 'docker' | 'direct' | 'opensandbox'
   running?: boolean
   status?: string
   userId?: number

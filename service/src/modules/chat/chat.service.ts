@@ -322,6 +322,86 @@ export class ChatService {
     };
   }
 
+  async runtimeWorkspaceList(body: { groupId?: number }, req?: Request) {
+    const traceId = this.createTraceId(req?.user?.id, body?.groupId);
+
+    if (!body?.groupId) {
+      throw new HttpException('缺少对话组ID', HttpStatus.BAD_REQUEST);
+    }
+
+    if (!this.openSandboxRuntimeService) {
+      return {
+        workspaceDir: '/workspace',
+        workspaceFiles: [],
+        workspaceRoot: '/workspace',
+        workspaceRootMode: 'conversation',
+      };
+    }
+
+    try {
+      const manifest = await this.openSandboxRuntimeService.listWorkspaceFiles({
+        groupId: body.groupId,
+        traceId,
+        userId: req.user.id,
+      });
+
+      return (
+        manifest || {
+          workspaceDir: '/workspace',
+          workspaceFiles: [],
+          workspaceRoot: '/workspace',
+          workspaceRootMode: 'conversation',
+        }
+      );
+    } catch (error) {
+      this.logTrace('warn', traceId, 'OpenSandbox runtime 工作区文件列表读取失败', {
+        error: serializeErrorForLog(error),
+        groupId: body.groupId,
+        userId: req.user.id,
+      });
+      throw error;
+    }
+  }
+
+  async runtimeWorkspaceRead(body: { groupId?: number; path?: string }, req?: Request) {
+    const traceId = this.createTraceId(req?.user?.id, body?.groupId);
+
+    if (!body?.groupId) {
+      throw new HttpException('缺少对话组ID', HttpStatus.BAD_REQUEST);
+    }
+
+    if (!body.path) {
+      throw new HttpException('缺少文件路径', HttpStatus.BAD_REQUEST);
+    }
+
+    if (!this.openSandboxRuntimeService) {
+      throw new HttpException('OpenSandbox runtime 不可用', HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    try {
+      const file = await this.openSandboxRuntimeService.readWorkspaceFile({
+        groupId: body.groupId,
+        path: body.path,
+        traceId,
+        userId: req.user.id,
+      });
+
+      if (!file) {
+        throw new HttpException('当前对话尚未创建运行时容器', HttpStatus.NOT_FOUND);
+      }
+
+      return file;
+    } catch (error) {
+      this.logTrace('warn', traceId, 'OpenSandbox runtime 工作区文件读取失败', {
+        error: serializeErrorForLog(error),
+        groupId: body.groupId,
+        path: body.path,
+        userId: req.user.id,
+      });
+      throw error;
+    }
+  }
+
   async chatProcess(body: any, req?: Request, res?: Response) {
     await this.userBalanceService.checkUserCertification(req.user.id);
     /* 获取对话参数 */

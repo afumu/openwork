@@ -11,9 +11,9 @@ declare const it: any;
 describe('OpenSandbox runtime workspace helpers', () => {
   it('builds a stable conversation workspace under the configured root', () => {
     expect(resolveRuntimeWorkspace({ groupId: 128, workspaceRoot: '/workspace' })).toEqual({
-      workspaceDir: 'conversations/128',
+      workspaceDir: '/workspace',
       workspaceRoot: '/workspace',
-      workspacePath: '/workspace/conversations/128',
+      workspacePath: '/workspace',
     });
   });
 

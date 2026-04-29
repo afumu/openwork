@@ -32,7 +32,7 @@ describe('OpenSandboxAgentChatService', () => {
         mode: 'opensandbox',
         sandboxId: 'sbx-1',
         userId: 1,
-        workspaceDir: 'conversations/23',
+        workspaceDir: '/workspace',
         workspaceRoot: '/workspace',
       }),
       stopAgent: jest.fn(),
