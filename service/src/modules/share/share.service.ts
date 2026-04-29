@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { GlobalConfigService } from '../globalConfig/globalConfig.service';
@@ -42,10 +42,9 @@ export class ShareService {
     try {
       await this.shareRepository.save(share);
       const siteUrl = await this.globalConfigService.getConfigs(['siteUrl']);
-      console.log(siteUrl);
       return `${siteUrl}/?shareCode=${shareCode}`;
     } catch (error) {
-      console.error('保存分享内容失败:', error);
+      Logger.error(error?.message || error, error?.stack, 'ShareService');
       // 可能的失败原因：内容过大、数据库连接问题等
       throw new Error(`创建分享失败: ${error.message || '未知错误'}`);
     }

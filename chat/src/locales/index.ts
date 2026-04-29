@@ -36,11 +36,9 @@ export function setLocale(locale: Language) {
 
 // 使用加密和指定过期时间（或永久保存）保存语言设置
 // export function setLocale(locale: Language) {
-//   console.log(`正在切换语言至: ${locale}`);
 //   i18n.global.locale = locale;
 //   // 使用自定义 localStorage 工具保存语言设置
 //   ls.set('appLanguage', locale);
-//   console.log(`当前语言已切换至: ${i18n.global.locale}`);
 // }
 
 export function setupI18n(app: App) {

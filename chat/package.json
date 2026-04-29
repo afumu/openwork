@@ -10,9 +10,8 @@
     "workspace",
     "web-ide"
   ],
-  "main": "electron/main.js",
   "scripts": {
-    "start:h": "pnpm run -C service dev",
+    "start:h": "pnpm run -C ../service dev",
     "start:f": "vite",
     "all": "npm-run-all --parallel start:h start:f",
     "dev": "vite",
@@ -24,16 +23,7 @@
     "type-check": "vue-tsc --noEmit",
     "bootstrap": "pnpm install && pnpm run common:prepare",
     "common:cleanup": "rimraf node_modules && rimraf pnpm-lock.yaml",
-    "format": "pnpm dlx prettier --write '{src,scripts,config}/**/*.{vue,ts,tsx,js,jsx,css,scss,less,json,md,html,yml,yaml}' '*.{js,ts,json,md,yml}'",
-    "electron": "electron .",
-    "electron:dev": "cross-env ELECTRON_START_URL=http://localhost:9002 electron .",
-    "electron:build": "pnpm run build && electron-builder",
-    "electron:mac": "pnpm run build && npx electron-builder --mac --config.npmRebuild=false",
-    "electron:mac-universal": "pnpm run build && npx electron-builder --mac --universal --config.npmRebuild=false",
-    "electron:win": "pnpm run build && electron-builder --win",
-    "electron:win-x64": "pnpm run build && electron-builder --win --x64",
-    "electron:win-arm64": "pnpm run build && electron-builder --win --arm64",
-    "electron:all": "pnpm run build && npx electron-builder --mac --universal --win --config.npmRebuild=false"
+    "format": "pnpm dlx prettier --write '{src,scripts,config}/**/*.{vue,ts,tsx,js,jsx,css,scss,less,json,md,html,yml,yaml}' '*.{js,ts,json,md,yml}'"
   },
   "dependencies": {
     "@codemirror/lang-cpp": "^6.0.2",

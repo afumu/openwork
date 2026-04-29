@@ -12,7 +12,6 @@
     "build": "nest build",
     "build:test": "nest build",
     "format": "prettier --write \"src/**/*.{vue,ts,tsx,js,jsx,css,scss,less}\"",
-    "encrypt": "node ./encrypt.js",
     "start:daemon": "pm2 start pm2.conf.json --no-daemon",
     "dev": "nest start --watch --preserveWatchOutput",
     "start:debug": "nest start --debug --watch",
@@ -21,10 +20,7 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json",
-    "pkg:win": "pkg . -t node16-win-x64 -o app-win --debug",
-    "pkg:mac": "pkg . -t node16-mac-x64 -o app-mac --debug",
-    "pkg:linux": "pkg . -t node16-linux-x64 -o app-linux --debug"
+    "test:e2e": "jest --config ./test/jest-e2e.json"
   },
   "dependencies": {
     "@alibaba-group/opensandbox": "^0.1.6",

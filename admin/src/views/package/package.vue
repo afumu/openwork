@@ -214,9 +214,7 @@ meta:
   function handleCreatePkg() {
     activePackageId.value = 0;
     // 确保分类列表已加载
-    queryCatList().then(() => {
-      console.log('分类列表加载完成:', appList.value); // 添加日志便于调试
-    });
+    queryCatList();
 
     visible.value = true;
     // 重置表单
@@ -224,7 +222,6 @@ meta:
       formPackageRef.value?.resetFields();
       // 确保初始化时appCats为空字符串而不是null
       formPackage.appCats = '';
-      console.log('初始化appCats:', formPackage.appCats); // 添加日志便于调试
     });
   }
 
@@ -264,18 +261,15 @@ meta:
 
   // 选择分类
   function selectCategory(catId: string, catName: string): void {
-    console.log('选择分类:', catId, catName); // 添加日志便于调试
     if (!formPackage.appCats || formPackage.appCats === '') {
       formPackage.appCats = String(catId);
     } else if (!formPackage.appCats.split(',').includes(String(catId))) {
       formPackage.appCats = `${formPackage.appCats},${catId}`;
     }
-    console.log('选择后的appCats:', formPackage.appCats); // 添加日志便于调试
   }
 
   // 移除分类
   function removeCategory(catId: string): void {
-    console.log('移除分类:', catId); // 添加日志便于调试
     if (!formPackage.appCats) return;
     const appCats = formPackage.appCats.split(',');
     const index = appCats.indexOf(String(catId));
@@ -283,7 +277,6 @@ meta:
       appCats.splice(index, 1);
       formPackage.appCats = appCats.join(',');
     }
-    console.log('移除后的appCats:', formPackage.appCats); // 添加日志便于调试
   }
 
   // 根据ID获取分类名称

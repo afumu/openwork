@@ -239,22 +239,18 @@ async function save() {
   if (!props.imageUrl) return
 
   try {
-    console.log('全局预览器开始下载图片:', props.imageUrl)
-
     // 尝试直接下载（适用于同域或支持CORS的图片）
     try {
       const response = await fetch(props.imageUrl, {
         mode: 'cors',
         credentials: 'omit',
       })
-      console.log('全局预览器fetch响应状态:', response.status, response.statusText)
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
       const blob = await response.blob()
-      console.log('全局预览器blob大小:', blob.size, 'blob类型:', blob.type)
 
       const url = window.URL.createObjectURL(blob)
 
@@ -266,11 +262,8 @@ async function save() {
       document.body.removeChild(a)
 
       window.URL.revokeObjectURL(url)
-      console.log('全局预览器图片下载完成')
       return
-    } catch (fetchError) {
-      console.log('全局预览器fetch下载失败，尝试canvas方法:', fetchError)
-
+    } catch {
       // 如果fetch失败，尝试使用canvas方法（适用于跨域图片）
       const img = new Image()
       img.crossOrigin = 'anonymous'
@@ -296,7 +289,6 @@ async function save() {
                 a.click()
                 document.body.removeChild(a)
                 window.URL.revokeObjectURL(url)
-                console.log('全局预览器canvas下载完成')
                 resolve(true)
               } else {
                 reject(new Error('无法生成图片blob'))
@@ -326,7 +318,6 @@ async function save() {
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
-      console.log('全局预览器已在新窗口打开图片')
     } catch (linkError) {
       console.error('全局预览器所有下载方法都失败了:', linkError)
     }

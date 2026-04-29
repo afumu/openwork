@@ -17,7 +17,6 @@
     "lint": "vue-tsc",
     "format": "prettier --write '{src,scripts,config}/**/*.{vue,ts,tsx,js,jsx,css,scss,less,json,md,html,yml,yaml}' '*.{js,ts,json,md,yml}'",
     "preinstall": "npx only-allow pnpm",
-    "commit": "git cz",
     "release": "bumpp"
   },
   "dependencies": {
@@ -95,11 +94,6 @@
     "vite-plugin-vue-devtools": "^7.7.6",
     "vite-plugin-vue-meta-layouts": "^0.5.1",
     "vue-tsc": "^2.2.10"
-  },
-  "config": {
-    "commitizen": {
-      "path": "node_modules/cz-git"
-    }
   },
   "resolutions": {
     "braces": ">=3.0.3",

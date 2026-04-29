@@ -620,9 +620,6 @@ const onConversation = async ({
     await createNewChatGroup()
     await chatStore.queryMyGroup()
   }
-  // console.log(modelType)
-  // return
-
   if (chatId) {
     await chatStore.deleteChatsAfterId(chatId)
     componentKey.value += 1
@@ -663,10 +660,6 @@ const onConversation = async ({
   activeStreamRequest.value = {
     groupId: options.groupId,
   }
-
-  console.log(usingPlugin.value)
-
-  console.log(useModel)
 
   /* 虚拟增加一条ai记录 */
   addGroupChat({

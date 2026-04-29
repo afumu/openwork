@@ -14,13 +14,6 @@ import { setupI18n } from './locales'
 import { setupImageViewer } from './plugins/imageViewer'
 import { setupStore } from './store'
 
-// 禁用生产环境中的 console.log
-if (process.env.NODE_ENV === 'production') {
-  console.log = () => {}
-  console.warn = () => {}
-  console.error = () => {}
-}
-
 // 检测系统主题并设置应用主题
 function detectSystemTheme() {
   const prefersDarkScheme = window.matchMedia('(prefers-color-scheme: dark)')

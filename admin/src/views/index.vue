@@ -211,7 +211,6 @@ meta:
 
   async function getBaseInfo() {
     const res = await apiDashboard.getBaseInfo();
-    console.log(res.data);
     baseInfo.value = res.data;
   }
 

@@ -14,7 +14,6 @@ import { ConfigEntity } from '../globalConfig/config.entity';
 import { UserBalanceService } from '../userBalance/userBalance.service';
 import { UserStatusEnum, UserStatusErrMsg } from './../../common/constants/user.constant';
 import { GlobalConfigService } from './../globalConfig/globalConfig.service';
-import { VerificationEntity } from './../verification/verification.entity';
 import { VerificationService } from './../verification/verification.service';
 import { QueryAllUserDto } from './dto/queryAllUser.dto';
 import { ResetUserPassDto } from './dto/resetUserPass.dto';
@@ -92,16 +91,7 @@ export class UserService {
         const expir = configMap['registerVerifyExpir']
           ? Number(configMap['registerVerifyExpir'])
           : 30 * 60;
-        const v: VerificationEntity = await this.verificationService.createVerification(
-          n,
-          VerificationEnum.Registration,
-          expir,
-        );
-        const { email } = v;
-
-        console.log('configMap: ', configMap);
-
-        console.log(`尝试发送邮件到: ${email}`); // 在尝试发送邮件之前打印日志
+        await this.verificationService.createVerification(n, VerificationEnum.Registration, expir);
       } else {
         /* 如果没有邮箱验证则 则直接主动注册验证通过逻辑 */
         const { id } = n;
@@ -110,7 +100,7 @@ export class UserService {
       }
       return n;
     } catch (error) {
-      console.log('error: ', error);
+      Logger.error(error?.message || error, error?.stack, 'UserService');
       throw error;
     }
   }
@@ -202,8 +192,6 @@ export class UserService {
 
   /* 获取用户基础信息 */
   async getUserInfo(userId: number) {
-    console.log('getUserInfo', userId.toString());
-
     // 检查userId是否是游客指纹ID (大于用户表中通常ID范围)
     const isVisitor = userId > 100000000; // 假设正常用户ID不会超过这个范围
 
@@ -665,8 +653,6 @@ export class UserService {
   /* 校验邮箱注册 */
   async verifyUserRegisterByEmail(params: any) {
     const { username, email } = params;
-    console.log(`校验邮箱注册: 开始 - 用户名: ${username}, 邮箱: ${email}`);
-
     // 查找数据库中是否存在该用户名或邮箱
     const user = await this.userEntity.findOne({
       where: [{ username }, { email }],
@@ -674,18 +660,14 @@ export class UserService {
 
     // 校验用户名是否已存在
     if (user && user.username === username) {
-      console.error(`校验失败: 用户名 "${username}" 已存在`);
       throw new HttpException('用户名已存在、请更换用户名！', HttpStatus.BAD_REQUEST);
     }
 
     // 校验邮箱是否已被注册
     // 注意：这里应检查user.email而不是user.phone，除非你的数据模型是这样设计的
     if (user && user.email === email) {
-      console.error(`校验失败: 邮箱 "${email}" 已被注册`);
       throw new HttpException('当前邮箱已注册、请勿重复注册！', HttpStatus.BAD_REQUEST);
     }
-
-    console.log(`校验邮箱注册: 成功 - 用户名: ${username}, 邮箱: ${email} 未被占用`);
   }
 
   /* 创建基础用户 */

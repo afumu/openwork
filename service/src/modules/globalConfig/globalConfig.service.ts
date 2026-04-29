@@ -1,24 +1,14 @@
 import { formatUrl, hideString } from '@/common/utils';
-import { resolveEnvFilePath } from '@/common/utils/resolveEnvFilePath';
 import { HttpException, HttpStatus, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import axios from 'axios';
 import { Request } from 'express';
-import * as fs from 'fs';
 import { In, Repository } from 'typeorm';
 import { ChatLogEntity } from './../chatLog/chatLog.entity';
 import { ModelsService } from './../models/models.service';
 import { ConfigEntity } from './config.entity';
 import { QueryConfigDto } from './dto/queryConfig.dto';
 import { SetConfigDto } from './dto/setConfig.dto';
-const packageJsonContent = fs.readFileSync(
-  resolveEnvFilePath({ filename: 'package.json', runtimeDir: __dirname }),
-  'utf-8',
-);
-const packageJson = JSON.parse(packageJsonContent);
-const version = packageJson.version;
-console.log(' current use version in ------>: ', version);
-
 @Injectable()
 export class GlobalConfigService implements OnModuleInit {
   constructor(
@@ -391,7 +381,7 @@ export class GlobalConfigService implements OnModuleInit {
 
       return '设置完成！';
     } catch (error) {
-      console.log('error: ', error);
+      Logger.error(error?.message || error, error?.stack, 'GlobalConfigService');
     }
   }
 
@@ -411,7 +401,7 @@ export class GlobalConfigService implements OnModuleInit {
         });
       }
     } catch (error) {
-      console.log('error: ', error);
+      Logger.error(error?.message || error, error?.stack, 'GlobalConfigService');
       throw new HttpException('设置配置信息错误！', HttpStatus.BAD_REQUEST);
     }
   }

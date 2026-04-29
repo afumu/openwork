@@ -150,7 +150,6 @@ meta:
   };
 
   const handleLogoSuccess: UploadProps['onSuccess'] = (response, uploadFile) => {
-    console.log('response: ', response);
     // 确保从正确的响应结构中获取URL
     if (response && response.data) {
       formInline.clientLogoPath = response.data;
@@ -217,7 +216,6 @@ meta:
   }
 
   const handleFaviconSuccess: UploadProps['onSuccess'] = (response, uploadFile) => {
-    console.log('response: ', response);
     // 确保从正确的响应结构中获取URL
     if (response && response.data) {
       formInline.clientFaviconPath = response.data;
@@ -228,7 +226,6 @@ meta:
   };
 
   const handleRobotAvatarSuccess: UploadProps['onSuccess'] = (response, uploadFile) => {
-    console.log('response: ', response);
     // 确保从正确的响应结构中获取URL
     if (response && response.data) {
       formInline.robotAvatar = response.data;
@@ -239,7 +236,6 @@ meta:
   };
 
   const handleUserDefaultAvatarSuccess: UploadProps['onSuccess'] = (response, uploadFile) => {
-    console.log('response: ', response);
     // 确保从正确的响应结构中获取URL
     if (response && response.data) {
       formInline.userDefaultAvatar = response.data;

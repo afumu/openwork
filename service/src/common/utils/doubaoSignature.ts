@@ -340,7 +340,6 @@ export class DoubaoSignature {
       const expectedSignature = authorization.split('Signature=')[1];
       return signature === expectedSignature;
     } catch (error) {
-      console.error(`[DEBUG] 豆包签名 - 验证签名失败:`, error);
       return false;
     }
   }
@@ -399,10 +398,6 @@ export function generateDoubaoSignature(
     ...request.headers,
     host: host,
   };
-
-  console.log(`[DEBUG] 豆包签名调试 - Host: ${host}`);
-  console.log(`[DEBUG] 豆包签名调试 - Headers: ${JSON.stringify(headersWithHost)}`);
-  console.log(`[DEBUG] 豆包签名调试 - Payload: ${request.payload?.substring(0, 100)}...`);
 
   const {
     authorization,

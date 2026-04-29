@@ -278,7 +278,6 @@ meta:
   }
 
   const handleAvatarSuccess: UploadProps['onSuccess'] = (response, uploadFile) => {
-    console.log('response: ', response);
     if (response && response.data) {
       formPackage.coverImg = response.data;
     } else {
@@ -287,7 +286,6 @@ meta:
   };
 
   const handleBackgroundSuccess: UploadProps['onSuccess'] = (response, uploadFile) => {
-    console.log('response: ', response);
     if (response && response.data) {
       formPackage.backgroundImg = response.data;
     } else {

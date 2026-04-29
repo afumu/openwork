@@ -361,7 +361,6 @@ meta:
   }
 
   const handleAvatarSuccess: UploadProps['onSuccess'] = (response, uploadFile) => {
-    console.log('response: ', response);
     if (response && response.data) {
       formPackage.modelAvatar = response.data;
     } else {

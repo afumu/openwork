@@ -74,7 +74,7 @@ async function generateIcons() {
 
       await fs.writeJSON(path.resolve(process.cwd(), 'src/iconify/data.json'), collectionsMeta);
 
-      exec('eslint src/iconify/data.json src/iconify/index.json --cache --fix');
+      exec('prettier --write src/iconify/data.json src/iconify/index.json');
     });
 }
 
