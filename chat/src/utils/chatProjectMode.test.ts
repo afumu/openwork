@@ -11,6 +11,7 @@ const footerSource = readFileSync(
   new URL('../views/chat/components/Footer/index.vue', import.meta.url),
   'utf8'
 )
+const chatPageSource = readFileSync(new URL('../views/chat/chat.vue', import.meta.url), 'utf8')
 
 test('runtime workspace is shown only for project groups', () => {
   assert.match(chatBaseSource, /isActiveProjectGroup/)
@@ -29,4 +30,10 @@ test('empty composer exposes ordinary chat and project mode tabs', () => {
   assert.match(footerSource, /selectedGroupType/)
   assert.match(footerSource, /普通对话/)
   assert.match(footerSource, /项目/)
+})
+
+test('ordinary chats do not inherit the active project model config', () => {
+  assert.match(chatPageSource, /const shouldInheritModelConfig/)
+  assert.match(chatPageSource, /groupType === 'project'/)
+  assert.match(chatPageSource, /shouldInheritModelConfig[\s\S]*chatStore\.activeGroupAppId === 0/)
 })

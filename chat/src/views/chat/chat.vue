@@ -55,7 +55,13 @@ async function createNewChatGroup(groupType: Chat.GroupType = 'chat') {
   chatStore.setStreamIn(false)
   try {
     const { modelInfo } = chatStore.activeConfig
-    if (modelInfo && isModelInherited.value && chatStore.activeGroupAppId === 0) {
+    const shouldInheritModelConfig =
+      groupType === 'project' &&
+      modelInfo &&
+      isModelInherited.value &&
+      chatStore.activeGroupAppId === 0
+
+    if (shouldInheritModelConfig) {
       const config = {
         modelInfo,
       }
