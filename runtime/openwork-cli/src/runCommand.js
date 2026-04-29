@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { OpenWorkCliError } from './errors.js';
 import { getRuntimeConfigPath, readProjectConfig, writeRuntimeConfig } from './projectConfig.js';
@@ -45,14 +45,22 @@ export async function runLifecycleCommand({
   const [bin, ...args] = command;
   const resolvedLogFile = logFile || defaultLogFile(workspace, commandName);
   await mkdir(path.dirname(resolvedLogFile), { recursive: true });
-  const logStream = createWriteStream(resolvedLogFile, { flags: 'w' });
 
   if (detached) {
-    const child = spawn(bin, args, {
-      cwd: workspace,
-      detached: true,
-      stdio: ['ignore', logStream, logStream],
-    });
+    await writeFile(resolvedLogFile, '', { flag: 'w' });
+    const child = spawn(
+      'sh',
+      ['-c', 'exec "$@" >> "$OPENWORK_LOG_FILE" 2>&1', 'openwork-detached', bin, ...args],
+      {
+        cwd: workspace,
+        detached: true,
+        env: {
+          ...process.env,
+          OPENWORK_LOG_FILE: resolvedLogFile,
+        },
+        stdio: 'ignore',
+      },
+    );
     child.unref();
     await writeRuntimeConfig(workspace, {
       [commandName]: {
@@ -71,6 +79,8 @@ export async function runLifecycleCommand({
       workspace,
     };
   }
+
+  const logStream = createWriteStream(resolvedLogFile, { flags: 'w' });
 
   return new Promise((resolve, reject) => {
     const child = spawn(bin, args, {

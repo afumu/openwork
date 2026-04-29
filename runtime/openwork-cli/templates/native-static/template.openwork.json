@@ -20,9 +20,9 @@
   },
   "commands": {
     "install": [],
-    "dev": ["python", "-m", "http.server", "<%= port %>", "--bind", "0.0.0.0"],
+    "dev": ["python3", "-m", "http.server", "<%= port %>", "--bind", "0.0.0.0"],
     "build": [],
-    "start": ["python", "-m", "http.server", "<%= port %>", "--bind", "0.0.0.0"],
+    "start": ["python3", "-m", "http.server", "<%= port %>", "--bind", "0.0.0.0"],
     "validate": []
   }
 }

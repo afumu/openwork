@@ -19,10 +19,10 @@
     "additionalProperties": false
   },
   "commands": {
-    "install": ["pnpm", "install", "--prefer-frozen-lockfile", "--prefer-offline"],
-    "dev": ["pnpm", "dev", "--host", "0.0.0.0", "--port", "<%= port %>"],
-    "build": ["pnpm", "build"],
-    "start": ["pnpm", "preview", "--host", "0.0.0.0", "--port", "<%= port %>"],
-    "validate": ["pnpm", "typecheck"]
+    "install": ["npm", "install"],
+    "dev": ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "<%= port %>"],
+    "build": ["npm", "run", "build"],
+    "start": ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "<%= port %>"],
+    "validate": ["npm", "run", "typecheck"]
   }
 }

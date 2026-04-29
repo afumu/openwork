@@ -1,0 +1,13 @@
+{
+  "name": "opensandbox-claude-supervisor-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node bridge.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.2.121",
+    "@anthropic-ai/claude-code": "2.1.121"
+  }
+}

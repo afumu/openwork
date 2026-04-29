@@ -62,7 +62,7 @@ describe('openwork init', () => {
       assert.equal(projectConfig.name, 'demo-site');
       assert.equal(projectConfig.template, 'native-static');
       assert.deepEqual(projectConfig.commands.dev, [
-        'python',
+        'python3',
         '-m',
         'http.server',
         '9000',
@@ -120,13 +120,50 @@ describe('openwork init', () => {
       );
       assert.equal(projectConfig.devPort, 5050);
       assert.deepEqual(projectConfig.commands.dev, [
-        'python',
+        'python3',
         '-m',
         'http.server',
         '5050',
         '--bind',
         '0.0.0.0',
       ]);
+    } finally {
+      await rm(workspace, { force: true, recursive: true });
+    }
+  });
+
+  it('can start the template dev command during init without blocking the CLI', async () => {
+    const workspace = await createTempWorkspace();
+
+    try {
+      const result = await runOpenwork(
+        [
+          'init',
+          'demo-site',
+          '--template',
+          'native-static',
+          '--workspace',
+          workspace,
+          '--dev',
+          '--json',
+        ],
+        { timeout: 2000 },
+      );
+
+      assert.equal(result.code, 0);
+      const payload = JSON.parse(result.stdout);
+      assert.equal(payload.ok, true);
+      assert.equal(payload.devStarted, true);
+
+      const runtime = JSON.parse(
+        await readFile(path.join(workspace, '.openwork/runtime.json'), 'utf8'),
+      );
+      assert.equal(runtime.dev.port, 9000);
+      assert.equal(typeof runtime.dev.pid, 'number');
+
+      try {
+        process.kill(runtime.dev.pid);
+      } catch {}
     } finally {
       await rm(workspace, { force: true, recursive: true });
     }

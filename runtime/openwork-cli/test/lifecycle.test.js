@@ -31,10 +31,11 @@ async function createWorkspaceWithProjectConfig(commands) {
   return workspace;
 }
 
-async function runOpenwork(args) {
+async function runOpenwork(args, options = {}) {
   try {
     const result = await execFileAsync(process.execPath, [cliPath, ...args], {
       cwd: path.resolve('.'),
+      ...options,
     });
     return { code: 0, stderr: result.stderr, stdout: result.stdout };
   } catch (error) {

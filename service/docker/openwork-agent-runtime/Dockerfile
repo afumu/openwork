@@ -1,5 +1,8 @@
 FROM opensandbox/code-interpreter:v1.0.2
 
+# Build from the repository root:
+# docker build -t openwork-agent-runtime:latest -f service/docker/openwork-agent-runtime/Dockerfile .
+
 ENV CLAUDE_BRIDGE_PORT=8787 \
     CLAUDE_BRIDGE_CWD=/workspace \
     CLAUDE_PERMISSION_MODE=bypassPermissions \
@@ -8,11 +11,16 @@ ENV CLAUDE_BRIDGE_PORT=8787 \
 
 WORKDIR /opt/openwork-agent-bridge
 
-COPY bridge/package.json bridge/package-lock.json ./
+COPY service/docker/openwork-agent-runtime/bridge/package.json service/docker/openwork-agent-runtime/bridge/package-lock.json ./
 RUN npm ci --omit=dev
 
-COPY bridge/bridge.mjs ./bridge.mjs
-RUN chmod +x ./bridge.mjs && mkdir -p /workspace
+COPY service/docker/openwork-agent-runtime/bridge/bridge.mjs service/docker/openwork-agent-runtime/bridge/bridgePrompt.mjs ./
+RUN chmod +x ./bridge.mjs && mkdir -p /workspace /etc/claude-code
+COPY service/docker/openwork-agent-runtime/claude/CLAUDE.md /etc/claude-code/CLAUDE.md
+
+COPY runtime/openwork-cli /opt/openwork-cli
+RUN chmod +x /opt/openwork-cli/bin/openwork.js \
+    && ln -sf /opt/openwork-cli/bin/openwork.js /usr/local/bin/openwork
 
 EXPOSE 8787
 
