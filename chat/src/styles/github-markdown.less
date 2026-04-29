@@ -1139,38 +1139,45 @@ html {
 .markdown-body.markdown-body-generate > pre:last-child code:after,
 .markdown-body.markdown-body-generate > td:last-child:after,
 .markdown-body.markdown-body-generate > ul:last-child li:last-child:after {
-  content: '';
-  /* 不使用文本内容 */
-  display: inline-block;
-  width: 0.875em;
-  /* 控制原点的大小 */
-  height: 0.875em;
-  /* 保持原点为圆形 */
-  margin-left: 2px;
-  // background-color: #000;
-  @apply bg-gray-900 dark:bg-gray-100;
-  /* 原点颜色 */
-  border-radius: 50%;
-  /* 使其成为圆形 */
-  animation: breathes 2s infinite ease-in-out;
-  /* 应用呼吸效果动画 */
-  vertical-align: middle;
-  /* 根据需要调整垂直对齐 */
+  content: ' 思考中...';
+  display: block;
+  width: max-content;
+  margin-top: 8px;
+  margin-left: 0;
+  padding: 2px 0;
+  color: #64748b;
+  font-size: 0.9em;
+  font-weight: 500;
+  line-height: 1.4;
+  animation: thinkingTextPulse 1.4s ease-in-out infinite;
+  vertical-align: baseline;
 }
 
-@keyframes breathes {
+.dark .markdown-body.markdown-body-generate > dd:last-child:after,
+.dark .markdown-body.markdown-body-generate > dl:last-child:after,
+.dark .markdown-body.markdown-body-generate > dt:last-child:after,
+.dark .markdown-body.markdown-body-generate > h1:last-child:after,
+.dark .markdown-body.markdown-body-generate > h2:last-child:after,
+.dark .markdown-body.markdown-body-generate > h3:last-child:after,
+.dark .markdown-body.markdown-body-generate > h4:last-child:after,
+.dark .markdown-body.markdown-body-generate > h5:last-child:after,
+.dark .markdown-body.markdown-body-generate > h6:last-child:after,
+.dark .markdown-body.markdown-body-generate > li:last-child:after,
+.dark .markdown-body.markdown-body-generate > ol:last-child li:last-child:after,
+.dark .markdown-body.markdown-body-generate > p:last-child:after,
+.dark .markdown-body.markdown-body-generate > pre:last-child code:after,
+.dark .markdown-body.markdown-body-generate > td:last-child:after,
+.dark .markdown-body.markdown-body-generate > ul:last-child li:last-child:after {
+  color: #cbd5e1;
+}
+
+@keyframes thinkingTextPulse {
   0%,
   100% {
-    transform: scale(1);
-    opacity: 1;
-    /* 开始和结束时完全不透明 */
+    opacity: 0.52;
   }
-
   50% {
-    transform: scale(0.75);
-    /* 中间缩小到75% */
-    opacity: 0.75;
-    /* 中间透明度降低，增加平滑感 */
+    opacity: 1;
   }
 }
 

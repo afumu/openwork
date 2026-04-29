@@ -66,7 +66,12 @@ export type OpenSandboxRuntimeConfig = {
   image: string;
   timeoutSeconds: number;
   useServerProxy: boolean;
+  workspaceBackend: 'container' | 'volume';
   workspaceRoot: string;
+  workspaceVolumeDeleteOnSandboxTermination: boolean;
+  workspaceVolumePrefix: string;
+  workspaceVolumeSize: string;
+  workspaceVolumeStorageClass?: string;
   cpu?: string;
   memory?: string;
 };
@@ -106,6 +111,22 @@ export type OpenSandboxClientCreateInput = {
   metadata: Record<string, string>;
   resource?: Record<string, string>;
   timeoutSeconds: number;
+  volumes?: OpenSandboxVolume[];
+};
+
+export type OpenSandboxVolumePVC = Record<string, unknown> & {
+  claimName: string;
+  createIfNotExists?: boolean;
+  deleteOnSandboxTermination?: boolean;
+  storage?: string | null;
+  storageClass?: string | null;
+};
+
+export type OpenSandboxVolume = Record<string, unknown> & {
+  mountPath: string;
+  name: string;
+  pvc?: OpenSandboxVolumePVC;
+  readOnly?: boolean;
 };
 
 export type OpenSandboxEndpoint = {

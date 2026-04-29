@@ -212,11 +212,14 @@ chat xterm
 /workspace
 ```
 
-需要在 OpenSandbox 创建 sandbox 时确定持久化策略：
+当前持久化策略：
 
-- 本地开发可使用 host volume。
-- 部署环境优先考虑 PVC。
-- 后续如果需要跨 runtime 迁移或长期归档，再接对象存储。
+- 默认使用 OpenSandbox `volumes` 把 platform-managed named volume 挂载到 `/workspace`。
+- 在 Docker runtime 下，volume 对应 Docker named volume。
+- 在 Kubernetes runtime 下，volume 对应 PVC。
+- volume 名称按 `userId + groupId` 稳定生成，同一个对话复用同一个 workspace。
+- 暂不做 `.openwork-workspace.json` 或模板复制。新 workspace 可以是空目录，后续由 OpenWork CLI 或 agent 命令初始化项目。
+- 如需回退到容器临时目录，可设置 `OPENWORK_WORKSPACE_BACKEND=container`。
 
 第一阶段只要求同一个 `userId + groupId` 能复用同一个 sandbox 或同一个持久 workspace。
 
@@ -230,7 +233,12 @@ OPEN_SANDBOX_API_KEY
 OPENWORK_AGENT_RUNTIME_IMAGE
 OPENWORK_AGENT_BRIDGE_PORT=8787
 OPENWORK_SANDBOX_EXECD_PORT=44772
+OPENWORK_WORKSPACE_BACKEND=volume
 OPENWORK_WORKSPACE_ROOT=/workspace
+OPENWORK_WORKSPACE_VOLUME_PREFIX=openwork-ws
+OPENWORK_WORKSPACE_VOLUME_SIZE=5Gi
+OPENWORK_WORKSPACE_VOLUME_STORAGE_CLASS=
+OPENWORK_WORKSPACE_DELETE_ON_CLOSE=false
 OPENWORK_SANDBOX_TIMEOUT_SECONDS=3600
 OPENWORK_SANDBOX_CPU=2
 OPENWORK_SANDBOX_MEMORY=4Gi

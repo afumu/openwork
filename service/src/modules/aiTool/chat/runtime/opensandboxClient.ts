@@ -72,6 +72,7 @@ export class OpenSandboxClientService implements OpenSandboxClient {
       metadata: input.metadata,
       resource,
       timeoutSeconds: input.timeoutSeconds,
+      volumes: input.volumes,
     });
   }
 
@@ -126,6 +127,15 @@ export function readOpenSandboxRuntimeConfig(): OpenSandboxRuntimeConfig {
     timeoutSeconds: Number(process.env.OPENWORK_SANDBOX_TIMEOUT_SECONDS || 3600),
     useServerProxy:
       String(process.env.OPEN_SANDBOX_USE_SERVER_PROXY || '').toLowerCase() === 'true',
+    workspaceBackend:
+      String(process.env.OPENWORK_WORKSPACE_BACKEND || 'volume').toLowerCase() === 'container'
+        ? 'container'
+        : 'volume',
     workspaceRoot: process.env.OPENWORK_WORKSPACE_ROOT || '/workspace',
+    workspaceVolumeDeleteOnSandboxTermination:
+      String(process.env.OPENWORK_WORKSPACE_DELETE_ON_CLOSE || '').toLowerCase() === 'true',
+    workspaceVolumePrefix: process.env.OPENWORK_WORKSPACE_VOLUME_PREFIX || 'openwork-ws',
+    workspaceVolumeSize: process.env.OPENWORK_WORKSPACE_VOLUME_SIZE || '5Gi',
+    workspaceVolumeStorageClass: process.env.OPENWORK_WORKSPACE_VOLUME_STORAGE_CLASS || undefined,
   };
 }

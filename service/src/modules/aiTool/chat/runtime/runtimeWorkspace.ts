@@ -23,11 +23,16 @@ export function resolveRuntimeWorkspace(input: {
   };
 }
 
-export function buildRuntimeMetadata(input: { groupId: number | string; userId: number }) {
+export function buildRuntimeMetadata(input: {
+  groupId: number | string;
+  userId: number;
+  workspace?: Record<string, string>;
+}) {
   return {
     groupId: String(input.groupId),
     runtimeKind: 'openwork-agent',
     userId: String(input.userId),
+    ...(input.workspace || {}),
   };
 }
 

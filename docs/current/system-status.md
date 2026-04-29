@@ -37,4 +37,4 @@ chat 前端
 
 运行时容器和 agent 对话开始接入 OpenSandbox。普通聊天模型由 `service` 按 `userId + groupId` 创建或复用 sandbox、连接容器内 bridge、把 Claude Code 事件流写回聊天流。模型密钥、模型名、代理地址和接口格式来自后台模型配置，并在创建或启动 bridge 时注入容器；不再从 `service` 环境变量读取模型侧密钥或模型名。
 
-右下角终端已按 `service -> OpenSandbox execd PTY` 方向接入 WebSocket 网关。命令执行、文件读写和更完整的 agent 事件协议仍按 [OpenSandbox 运行时改造方案](./opensandbox-runtime-plan.md) 继续推进。
+右下角终端已按 `service -> OpenSandbox execd PTY` 方向接入 WebSocket 网关。运行时 workspace 默认通过 OpenSandbox volume 挂载到 `/workspace`，按 `userId + groupId` 稳定复用；暂不做模板初始化，由后续命令行工具负责项目初始化。命令执行、文件读写和更完整的 agent 事件协议仍按 [OpenSandbox 运行时改造方案](./opensandbox-runtime-plan.md) 继续推进。

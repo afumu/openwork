@@ -374,6 +374,21 @@ export function getToolExecutionDisplayModel(item: ToolExecutionItem): ToolExecu
   }
 }
 
+export function isVisibleToolExecutionItem(item: ToolExecutionItem) {
+  const title = String(item.display_title || item.step_title || '').trim()
+  if (item.kind === 'workflow_step' && title === 'Claude Code 容器已启动') return false
+  return true
+}
+
+export function isActiveToolExecutionItem(item: ToolExecutionItem) {
+  if (!isVisibleToolExecutionItem(item)) return false
+  return getToolExecutionStatus(item) === 'pending'
+}
+
+export function hasActiveToolExecutionItems(items: ToolExecutionItem[]) {
+  return items.some(isActiveToolExecutionItem)
+}
+
 export function extractTextResult(result: unknown) {
   if (typeof result === 'string') return result
   if (isRecord(result)) {

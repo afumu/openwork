@@ -25,6 +25,12 @@ function createSandbox(id = 'sbx-1') {
   };
 }
 
+function expectValidOpenSandboxMetadata(metadata: Record<string, string>) {
+  for (const value of Object.values(metadata)) {
+    expect(value).toMatch(/^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$/);
+  }
+}
+
 describe('OpenSandboxRuntimeService', () => {
   const originalEnv = process.env;
   const originalFetch = global.fetch;
@@ -79,13 +85,31 @@ describe('OpenSandboxRuntimeService', () => {
           OPENWORK_MODEL_NAME: 'claude-test',
         }),
         image: 'openwork-agent-runtime:test',
-        metadata: {
+        metadata: expect.objectContaining({
           groupId: '128',
           runtimeKind: 'openwork-agent',
           userId: '42',
-        },
+          workspaceBackend: 'volume',
+          workspaceRoot: 'workspace',
+          workspaceScope: 'conversation',
+          workspaceVolumeName: expect.stringMatching(/^openwork-ws-u42-g128-[a-f0-9]{8}$/),
+        }),
+        volumes: [
+          {
+            mountPath: '/workspace',
+            name: 'workspace',
+            pvc: expect.objectContaining({
+              claimName: expect.stringMatching(/^openwork-ws-u42-g128-[a-f0-9]{8}$/),
+              createIfNotExists: true,
+              deleteOnSandboxTermination: false,
+              storage: '5Gi',
+            }),
+            readOnly: false,
+          },
+        ],
       }),
     );
+    expectValidOpenSandboxMetadata(client.createSandbox.mock.calls[0][0].metadata);
     expect(sandbox.commands.run).toHaveBeenCalledWith(
       expect.stringContaining('/opt/openwork-agent-bridge/bridge.mjs'),
       expect.objectContaining({
@@ -145,6 +169,45 @@ describe('OpenSandboxRuntimeService', () => {
     expect(client.createSandbox).not.toHaveBeenCalled();
     expect(sandbox.commands.run).toHaveBeenCalled();
     expect(descriptor.sandboxId).toBe('sbx-existing');
+  });
+
+  it('can disable persistent workspace volume mounting for container-only workspaces', async () => {
+    process.env = {
+      ...originalEnv,
+      OPEN_SANDBOX_DOMAIN: 'http://localhost:8080',
+      OPENWORK_AGENT_RUNTIME_IMAGE: 'openwork-agent-runtime:test',
+      OPENWORK_WORKSPACE_BACKEND: 'container',
+    };
+    const sandbox = createSandbox('sbx-created');
+    const client = {
+      createSandbox: jest.fn().mockResolvedValue(sandbox),
+      findSandboxByMetadata: jest.fn().mockResolvedValue(null),
+    };
+    global.fetch = jest.fn().mockResolvedValue({
+      json: async () => ({ ok: true }),
+      ok: true,
+      status: 200,
+      text: async () => '{"ok":true}',
+    });
+
+    const service = new OpenSandboxRuntimeService(client as any);
+    await service.ensureRuntime({
+      groupId: 128,
+      traceId: 'trace-1',
+      userId: 42,
+    });
+
+    expect(client.createSandbox).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          workspaceBackend: 'container',
+          workspaceRoot: 'workspace',
+          workspaceScope: 'conversation',
+        }),
+      }),
+    );
+    expectValidOpenSandboxMetadata(client.createSandbox.mock.calls[0][0].metadata);
+    expect(client.createSandbox.mock.calls[0][0].volumes).toBeUndefined();
   });
 
   it('returns an execd PTY terminal target for an existing runtime without starting the bridge', async () => {

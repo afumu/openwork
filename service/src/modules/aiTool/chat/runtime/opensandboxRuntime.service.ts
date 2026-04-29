@@ -6,6 +6,7 @@ import type {
   OpenSandboxClient,
   OpenSandboxRuntimeConfig,
   OpenSandboxSandbox,
+  OpenSandboxVolume,
   RuntimeDescriptor,
   RuntimeWorkspaceManifest,
   RuntimeWorkspaceReadResult,
@@ -42,6 +43,104 @@ function shellQuote(value: string) {
 
 function buildEnvSignature(env: Record<string, string>) {
   return createHash('sha256').update(JSON.stringify(env)).digest('hex');
+}
+
+function buildStableHash(value: unknown, length = 8) {
+  return createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, length);
+}
+
+function sanitizeDnsLabelSegment(value: string, fallback: string) {
+  const sanitized = String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return sanitized || fallback;
+}
+
+function sanitizeMetadataValue(value: string, fallback: string) {
+  return sanitizeDnsLabelSegment(value, fallback).slice(0, 63).replace(/-+$/g, '') || fallback;
+}
+
+function buildWorkspaceVolumeName(input: {
+  groupId: number | string;
+  prefix: string;
+  userId: number;
+}) {
+  const hash = buildStableHash(
+    {
+      groupId: String(input.groupId),
+      userId: String(input.userId),
+    },
+    8,
+  );
+  const prefix = sanitizeDnsLabelSegment(input.prefix, 'openwork-ws');
+  const user = sanitizeDnsLabelSegment(`u${input.userId}`, 'u0');
+  const group = sanitizeDnsLabelSegment(`g${String(input.groupId)}`, 'g0');
+  const base = `${prefix}-${user}-${group}`;
+  const maxBaseLength = 63 - hash.length - 1;
+  const trimmedBase = base.slice(0, maxBaseLength).replace(/-+$/g, '') || 'openwork-ws';
+  return `${trimmedBase}-${hash}`;
+}
+
+function stripEmptyObjectValues<T extends Record<string, unknown>>(value: T) {
+  return Object.entries(value).reduce<Record<string, unknown>>((acc, [key, item]) => {
+    if (item !== undefined && item !== null && item !== '') {
+      acc[key] = item;
+    }
+    return acc;
+  }, {}) as T;
+}
+
+function buildWorkspaceMountPlan(input: {
+  config: OpenSandboxRuntimeConfig;
+  groupId: number | string;
+  userId: number;
+  workspaceRoot: string;
+}) {
+  const baseMetadata: Record<string, string> = {
+    workspaceBackend: input.config.workspaceBackend,
+    workspaceRoot: sanitizeMetadataValue(input.workspaceRoot, 'workspace'),
+    workspaceScope: 'conversation',
+  };
+
+  if (input.config.workspaceBackend !== 'volume') {
+    return {
+      metadata: {
+        ...baseMetadata,
+        workspaceSignature: buildStableHash(baseMetadata, 12),
+      },
+      volumes: undefined,
+    };
+  }
+
+  const volumeName = buildWorkspaceVolumeName({
+    groupId: input.groupId,
+    prefix: input.config.workspaceVolumePrefix,
+    userId: input.userId,
+  });
+  const pvc = stripEmptyObjectValues({
+    claimName: volumeName,
+    createIfNotExists: true,
+    deleteOnSandboxTermination: input.config.workspaceVolumeDeleteOnSandboxTermination,
+    storage: input.config.workspaceVolumeSize,
+    storageClass: input.config.workspaceVolumeStorageClass,
+  });
+  const volumes: OpenSandboxVolume[] = [
+    {
+      mountPath: input.workspaceRoot,
+      name: 'workspace',
+      pvc,
+      readOnly: false,
+    },
+  ];
+  const metadata = {
+    ...baseMetadata,
+    workspaceVolumeName: volumeName,
+    workspaceSignature: buildStableHash({ ...baseMetadata, volumeName, pvc }, 12),
+  };
+
+  return { metadata, volumes };
 }
 
 function commandOutputToString(log?: any[] | string) {
@@ -284,10 +383,20 @@ export class OpenSandboxRuntimeService {
 
   async ensureRuntime(input: EnsureRuntimeInput): Promise<RuntimeDescriptor> {
     const config = this.getConfig();
-    const metadata = buildRuntimeMetadata({ groupId: input.groupId, userId: input.userId });
     const workspace = resolveRuntimeWorkspace({
       groupId: input.groupId,
       workspaceRoot: config.workspaceRoot,
+    });
+    const workspaceMount = buildWorkspaceMountPlan({
+      config,
+      groupId: input.groupId,
+      userId: input.userId,
+      workspaceRoot: workspace.workspaceRoot,
+    });
+    const metadata = buildRuntimeMetadata({
+      groupId: input.groupId,
+      userId: input.userId,
+      workspace: workspaceMount.metadata,
     });
     const existing = await this.client.findSandboxByMetadata(metadata);
     const modelEnv = buildModelRuntimeEnv(input);
@@ -306,6 +415,7 @@ export class OpenSandboxRuntimeService {
           }),
           image: config.image,
           metadata,
+          volumes: workspaceMount.volumes,
           resource: {
             cpu: config.cpu || '2',
             memory: config.memory || '4Gi',
@@ -332,7 +442,21 @@ export class OpenSandboxRuntimeService {
 
   async getRuntimeStatus(input: RuntimeStatusInput): Promise<RuntimeDescriptor | null> {
     const config = this.getConfig();
-    const metadata = buildRuntimeMetadata({ groupId: input.groupId, userId: input.userId });
+    const workspace = resolveRuntimeWorkspace({
+      groupId: input.groupId,
+      workspaceRoot: config.workspaceRoot,
+    });
+    const workspaceMount = buildWorkspaceMountPlan({
+      config,
+      groupId: input.groupId,
+      userId: input.userId,
+      workspaceRoot: workspace.workspaceRoot,
+    });
+    const metadata = buildRuntimeMetadata({
+      groupId: input.groupId,
+      userId: input.userId,
+      workspace: workspaceMount.metadata,
+    });
     const existing = await this.client.findSandboxByMetadata(metadata);
 
     if (!existing) {
@@ -345,17 +469,27 @@ export class OpenSandboxRuntimeService {
 
   async getRuntimeTerminalTarget(input: RuntimeStatusInput): Promise<RuntimeTerminalTarget | null> {
     const config = this.getConfig();
-    const metadata = buildRuntimeMetadata({ groupId: input.groupId, userId: input.userId });
+    const workspace = resolveRuntimeWorkspace({
+      groupId: input.groupId,
+      workspaceRoot: config.workspaceRoot,
+    });
+    const workspaceMount = buildWorkspaceMountPlan({
+      config,
+      groupId: input.groupId,
+      userId: input.userId,
+      workspaceRoot: workspace.workspaceRoot,
+    });
+    const metadata = buildRuntimeMetadata({
+      groupId: input.groupId,
+      userId: input.userId,
+      workspace: workspaceMount.metadata,
+    });
     const existing = await this.client.findSandboxByMetadata(metadata);
 
     if (!existing) {
       return null;
     }
 
-    const workspace = resolveRuntimeWorkspace({
-      groupId: input.groupId,
-      workspaceRoot: config.workspaceRoot,
-    });
     const sandbox = await this.client.connectSandbox(existing.id);
     const endpoint = await sandbox.getEndpoint(config.execdPort);
     const protocol = sandbox.connectionConfig?.protocol || 'http';
@@ -449,7 +583,21 @@ export class OpenSandboxRuntimeService {
 
   private async connectExistingRuntime(input: RuntimeStatusInput) {
     const config = this.getConfig();
-    const metadata = buildRuntimeMetadata({ groupId: input.groupId, userId: input.userId });
+    const workspace = resolveRuntimeWorkspace({
+      groupId: input.groupId,
+      workspaceRoot: config.workspaceRoot,
+    });
+    const workspaceMount = buildWorkspaceMountPlan({
+      config,
+      groupId: input.groupId,
+      userId: input.userId,
+      workspaceRoot: workspace.workspaceRoot,
+    });
+    const metadata = buildRuntimeMetadata({
+      groupId: input.groupId,
+      userId: input.userId,
+      workspace: workspaceMount.metadata,
+    });
     const existing = await this.client.findSandboxByMetadata(metadata);
 
     if (!existing) {

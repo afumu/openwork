@@ -5,6 +5,8 @@ import {
   extractToolValueFields,
   extractWriteContent,
   getToolExecutionDisplayModel,
+  hasActiveToolExecutionItems,
+  isVisibleToolExecutionItem,
   normalizeToolName,
   parseToolExecutionValue,
   stringifyToolValue,
@@ -81,6 +83,72 @@ describe('tool execution rendering model', () => {
 
     assert.equal(model.toolName, 'OpenWork')
     assert.equal(model.summary, 'Claude Code 容器已启动')
+  })
+
+  it('hides Claude Code container startup workflow rows from the chat timeline', () => {
+    assert.equal(
+      isVisibleToolExecutionItem({
+        display_title: 'Claude Code 容器已启动',
+        event: 'start',
+        kind: 'workflow_step',
+        phase: 'executing',
+        tool_call_id: 'runtime-1',
+        tool_name: 'opensandbox_agent',
+      }),
+      false
+    )
+
+    assert.equal(
+      isVisibleToolExecutionItem({
+        display_title: '正在读取工作区',
+        event: 'start',
+        kind: 'workflow_step',
+        phase: 'executing',
+        tool_call_id: 'runtime-2',
+        tool_name: 'opensandbox_agent',
+      }),
+      true
+    )
+  })
+
+  it('detects active visible tool execution rows for assistant status display', () => {
+    assert.equal(
+      hasActiveToolExecutionItems([
+        {
+          event: 'start',
+          phase: 'executing',
+          tool_call_id: 'write-1',
+          tool_name: 'Write',
+        },
+      ]),
+      true
+    )
+
+    assert.equal(
+      hasActiveToolExecutionItems([
+        {
+          display_title: 'Claude Code 容器已启动',
+          event: 'start',
+          kind: 'workflow_step',
+          phase: 'executing',
+          tool_call_id: 'runtime-1',
+          tool_name: 'opensandbox_agent',
+        },
+      ]),
+      false
+    )
+
+    assert.equal(
+      hasActiveToolExecutionItems([
+        {
+          event: 'end',
+          phase: 'completed',
+          tool_call_id: 'write-1',
+          tool_name: 'Write',
+        },
+      ]),
+      false
+    )
   })
 
   it('parses JSON previews and keeps plain text intact', () => {

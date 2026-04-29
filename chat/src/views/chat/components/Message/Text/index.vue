@@ -35,6 +35,7 @@ import MarkdownIt from 'markdown-it'
 import mila from 'markdown-it-link-attributes'
 import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import ToolExecutionRenderer from '../ToolExecutionRenderer.vue'
+import { hasActiveToolExecutionItems, isVisibleToolExecutionItem } from '../toolExecution'
 
 // 注册mermaid语言到highlight.js
 hljs.registerLanguage('mermaid', () => ({
@@ -637,7 +638,7 @@ const parsedToolExecution = computed<ToolExecutionItem[]>(() => {
   if (!props.toolExecution) return []
   try {
     const parsed = JSON.parse(props.toolExecution)
-    return Array.isArray(parsed) ? parsed : []
+    return Array.isArray(parsed) ? parsed.filter(isVisibleToolExecutionItem) : []
   } catch (error) {
     return []
   }
@@ -654,7 +655,7 @@ const parsedStreamSegments = computed<AssistantStreamSegment[]>(() => {
       if (!item || typeof item !== 'object') return false
       if (item.type === 'text') return typeof item.text === 'string'
       if (item.type === 'reasoning') return typeof item.text === 'string'
-      return item.type === 'tool_execution'
+      return item.type === 'tool_execution' && isVisibleToolExecutionItem(item as ToolExecutionItem)
     }) as AssistantStreamSegment[]
   } catch (error) {
     return []
@@ -664,6 +665,24 @@ const parsedStreamSegments = computed<AssistantStreamSegment[]>(() => {
 const hasOrderedStreamSegments = computed(() => parsedStreamSegments.value.length > 0)
 const hasOrderedReasoningSegments = computed(() =>
   parsedStreamSegments.value.some(segment => segment.type === 'reasoning')
+)
+const orderedToolExecutionSegments = computed<ToolExecutionItem[]>(() =>
+  parsedStreamSegments.value.filter(
+    (segment): segment is ToolExecutionAssistantStreamSegment => segment.type === 'tool_execution'
+  )
+)
+const hasActiveToolExecution = computed(
+  () =>
+    hasActiveToolExecutionItems(parsedToolExecution.value) ||
+    hasActiveToolExecutionItems(orderedToolExecutionSegments.value)
+)
+const shouldShowThinkingState = computed(() => Boolean(props.loading && !hasActiveToolExecution.value))
+const shouldShowEmptyThinkingState = computed(
+  () =>
+    shouldShowThinkingState.value &&
+    !text.value &&
+    !reasoningText.value &&
+    !hasOrderedStreamSegments.value
 )
 
 function artifactTypeLabel(file?: ArtifactFileSummary | null) {
@@ -1317,16 +1336,21 @@ function openSingleImagePreview(src: string) {
       <!-- AI回复内容 -->
       <div v-if="!isUserMessage" class="w-full">
         <span
-          v-if="loading && !text && !reasoningText && !hasOrderedStreamSegments"
-          class="inline-block w-3.5 h-3.5 ml-0.5 align-middle rounded-full animate-breathe dark:bg-gray-100 bg-gray-950"
-        ></span>
+          v-if="shouldShowEmptyThinkingState"
+          class="thinking-indicator"
+        >
+          <span>思考中</span>
+          <span class="thinking-dot">.</span>
+          <span class="thinking-dot thinking-dot-delay-1">.</span>
+          <span class="thinking-dot thinking-dot-delay-2">.</span>
+        </span>
         <div v-if="hasOrderedStreamSegments" class="flex flex-col gap-3">
           <template v-for="segment in parsedStreamSegments" :key="segment.id">
             <div
               v-if="segment.type === 'text'"
               :class="[
                 'markdown-body text-gray-950 dark:text-gray-100',
-                { 'markdown-body-generate': loading || !segment.text },
+                { 'markdown-body-generate': shouldShowThinkingState && (loading || !segment.text) },
               ]"
               v-html="renderAssistantMarkdown(segment.text)"
             ></div>
@@ -1334,7 +1358,7 @@ function openSingleImagePreview(src: string) {
               v-else-if="segment.type === 'reasoning'"
               :class="[
                 'markdown-body text-gray-600 dark:text-gray-400 pl-5 border-l-2 border-gray-300 dark:border-gray-600',
-                { 'markdown-body-generate': loading || !segment.text },
+                { 'markdown-body-generate': shouldShowThinkingState && (loading || !segment.text) },
               ]"
               v-html="renderAssistantMarkdown(segment.text)"
             ></div>
@@ -1347,7 +1371,7 @@ function openSingleImagePreview(src: string) {
           v-if="!hasOrderedStreamSegments"
           :class="[
             'markdown-body text-gray-950 dark:text-gray-100',
-            { 'markdown-body-generate': loading || !text },
+            { 'markdown-body-generate': shouldShowThinkingState && (loading || !text) },
           ]"
           v-html="text"
         ></div>
@@ -1691,6 +1715,55 @@ function openSingleImagePreview(src: string) {
 
 .animate-breathe {
   animation: breathe 2s infinite ease-in-out;
+}
+
+.thinking-indicator {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1px;
+  color: #64748b;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0;
+  animation: thinking-label-fade 1.6s ease-in-out infinite;
+}
+
+.dark .thinking-indicator {
+  color: #cbd5e1;
+}
+
+.thinking-dot {
+  animation: thinking-dot-rise 1.2s ease-in-out infinite;
+}
+
+.thinking-dot-delay-1 {
+  animation-delay: 0.16s;
+}
+
+.thinking-dot-delay-2 {
+  animation-delay: 0.32s;
+}
+
+@keyframes thinking-label-fade {
+  0%,
+  100% {
+    opacity: 0.72;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes thinking-dot-rise {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
 }
 
 /* 折叠/展开动画 */
