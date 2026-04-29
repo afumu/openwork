@@ -9,6 +9,7 @@ function createChatService(
   openAIChatService: any = { chatFree: jest.fn() },
   openSandboxRuntimeService?: any,
   chatGroupService: any = {},
+  modelsService: any = {},
 ) {
   return new ChatService(
     {} as any,
@@ -22,7 +23,7 @@ function createChatService(
     {} as any,
     {} as any,
     chatGroupService as any,
-    {} as any,
+    modelsService as any,
     {} as any,
     undefined as any,
     openSandboxRuntimeService,
@@ -30,6 +31,59 @@ function createChatService(
 }
 
 describe('ChatService history building', () => {
+  it('falls back to an OpenAI-compatible model for ordinary chats with anthropic model config', async () => {
+    const fallbackModel = {
+      apiFormat: 'openai',
+      keyType: 1,
+      model: 'gpt-5.3-codex',
+      modelName: 'gpt-5.3-codex',
+    };
+    const service = createChatService(undefined, undefined, {}, {
+      getFirstOpenAICompatibleChatModel: jest.fn().mockResolvedValue(fallbackModel),
+    });
+
+    const resolved = await (service as any).resolveOrdinaryChatModelKeyInfo(
+      {
+        apiFormat: 'anthropic',
+        keyType: 1,
+        model: 'deepseek-v4-flash',
+        modelName: 'deepseek',
+      },
+      {
+        groupType: 'chat',
+        id: 59,
+      },
+      'trace-test',
+    );
+
+    expect(resolved).toBe(fallbackModel);
+  });
+
+  it('keeps anthropic model config for project chats', async () => {
+    const modelsService = {
+      getFirstOpenAICompatibleChatModel: jest.fn(),
+    };
+    const service = createChatService(undefined, undefined, {}, modelsService);
+    const projectModel = {
+      apiFormat: 'anthropic',
+      keyType: 1,
+      model: 'deepseek-v4-flash',
+      modelName: 'deepseek',
+    };
+
+    const resolved = await (service as any).resolveOrdinaryChatModelKeyInfo(
+      projectModel,
+      {
+        groupType: 'project',
+        id: 60,
+      },
+      'trace-test',
+    );
+
+    expect(resolved).toBe(projectModel);
+    expect(modelsService.getFirstOpenAICompatibleChatModel).not.toHaveBeenCalled();
+  });
+
   it('does not query OpenSandbox runtime status for ordinary chat groups', async () => {
     const runtimeService = {
       getRuntimeStatus: jest.fn(),

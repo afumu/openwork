@@ -128,6 +128,38 @@ export class ChatService {
     return groupInfo?.groupType === 'project';
   }
 
+  private isOpenAICompatibleModelKey(modelKey: any) {
+    return String(modelKey?.apiFormat || 'openai')
+      .trim()
+      .toLowerCase() === 'openai';
+  }
+
+  private async resolveOrdinaryChatModelKeyInfo(
+    currentModelKey: any,
+    groupInfo: any,
+    traceId: string,
+  ) {
+    if (this.isProjectGroup(groupInfo) || this.isOpenAICompatibleModelKey(currentModelKey)) {
+      return currentModelKey;
+    }
+
+    const fallbackModelKey = await this.modelsService.getFirstOpenAICompatibleChatModel();
+    if (fallbackModelKey) {
+      this.logTrace('warn', traceId, '普通对话模型不是 OpenAI 兼容接口，已回退到兼容模型', {
+        groupId: groupInfo?.id,
+        originalApiFormat: currentModelKey?.apiFormat,
+        originalModel: currentModelKey?.model,
+        resolvedModel: fallbackModelKey.model,
+      });
+      return fallbackModelKey;
+    }
+
+    throw new HttpException(
+      '普通对话当前模型不是 OpenAI 兼容接口，请在后台配置 apiFormat=openai 的普通聊天模型，或切换到项目模式。',
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+
   private buildNonProjectRuntimeStatus(groupId: number, userId?: number) {
     return {
       groupId,
@@ -992,6 +1024,12 @@ export class ChatService {
       );
     }
 
+    currentRequestModelKey = await this.resolveOrdinaryChatModelKeyInfo(
+      currentRequestModelKey,
+      activeGroupInfo,
+      traceId,
+    );
+
     const {
       deduct,
       isTokenBased,
@@ -1035,7 +1073,7 @@ export class ChatService {
     );
 
     // 整理对话参数
-    const useModeName = modelName;
+    const useModeName = currentRequestModelKey.modelName || modelName;
     const proxyResUrl = formatUrl(proxyUrl || openaiBaseUrl || 'https://api.openai.com');
 
     const modelKey = key || openaiBaseKey;

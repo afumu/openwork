@@ -103,6 +103,20 @@ export class ModelsService {
     });
   }
 
+  async getFirstOpenAICompatibleChatModel() {
+    return this.modelsEntity.findOne({
+      where: {
+        apiFormat: 'openai',
+        keyType: 1,
+        status: true,
+      },
+      order: {
+        modelOrder: 'ASC',
+        id: 'ASC',
+      },
+    });
+  }
+
   async getSpecialModelKeyInfo(modelPrefix) {
     // 使用Like操作符进行模糊查询
     const matchingModels = await this.modelsEntity.find({
