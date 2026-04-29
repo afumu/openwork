@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "name": "vite-vue",
+  "paramsSchema": {
+    "type": "object",
+    "properties": {
+      "appName": {
+        "type": "string",
+        "default": "openwork-vue-app",
+        "pattern": "^[a-z0-9-]+$"
+      },
+      "port": {
+        "type": "number",
+        "default": 5000,
+        "minimum": 1024,
+        "maximum": 65535
+      }
+    },
+    "additionalProperties": false
+  },
+  "commands": {
+    "install": ["pnpm", "install", "--prefer-frozen-lockfile", "--prefer-offline"],
+    "dev": ["pnpm", "dev", "--host", "0.0.0.0", "--port", "<%= port %>"],
+    "build": ["pnpm", "build"],
+    "start": ["pnpm", "preview", "--host", "0.0.0.0", "--port", "<%= port %>"],
+    "validate": ["pnpm", "typecheck"]
+  }
+}

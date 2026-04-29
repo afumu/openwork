@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "name": "native-static",
+  "paramsSchema": {
+    "type": "object",
+    "properties": {
+      "appName": {
+        "type": "string",
+        "default": "openwork-static",
+        "pattern": "^[a-z0-9-]+$"
+      },
+      "port": {
+        "type": "number",
+        "default": 5000,
+        "minimum": 1024,
+        "maximum": 65535
+      }
+    },
+    "additionalProperties": false
+  },
+  "commands": {
+    "install": [],
+    "dev": ["python", "-m", "http.server", "<%= port %>", "--bind", "0.0.0.0"],
+    "build": [],
+    "start": ["python", "-m", "http.server", "<%= port %>", "--bind", "0.0.0.0"],
+    "validate": []
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "templates": [
+    {
+      "name": "native-static",
+      "title": "原生静态网站",
+      "description": "适合 HTML/CSS/JS 单页、小游戏、静态页面",
+      "location": "./native-static",
+      "tags": ["html", "static", "game"],
+      "devPort": 5000
+    },
+    {
+      "name": "vite-react",
+      "title": "React SPA",
+      "description": "适合 React 单页应用、交互页面和轻量工具",
+      "location": "./vite-react",
+      "tags": ["react", "vite", "spa"],
+      "devPort": 5000
+    },
+    {
+      "name": "vite-vue",
+      "title": "Vue SPA",
+      "description": "适合 Vue 3 单页应用和轻量前端项目",
+      "location": "./vite-vue",
+      "tags": ["vue", "vite", "spa"],
+      "devPort": 5000
+    },
+    {
+      "name": "vite-vue-admin",
+      "title": "Vue 管理后台",
+      "description": "适合后台系统、表格、表单、登录和权限页面",
+      "location": "./vite-vue-admin",
+      "tags": ["vue", "admin", "dashboard"],
+      "devPort": 5000
+    },
+    {
+      "name": "nextjs",
+      "title": "Next.js 全栈应用",
+      "description": "适合 React 全栈、SSR、SEO 和多页面应用",
+      "location": "./nextjs",
+      "tags": ["react", "nextjs", "ssr"],
+      "devPort": 5000
+    }
+  ]
+}
