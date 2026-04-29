@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { describe, it } from 'node:test';
-import { loadTemplates, recommendTemplate } from '../src/templateRegistry.js';
+import path from 'node:path';
+import { promisify } from 'node:util';
+import { loadTemplates } from '../src/templateRegistry.js';
+
+const execFileAsync = promisify(execFile);
+const cliPath = path.resolve('bin/openwork.js');
 
 describe('template registry', () => {
   it('loads bundled templates from templates.json', async () => {
@@ -13,12 +19,20 @@ describe('template registry', () => {
     );
   });
 
-  it('recommends the admin Vue template for Vue dashboard prompts', async () => {
-    const registry = await loadTemplates();
-    const recommendation = recommendTemplate('帮我做一个 Vue 管理后台', registry);
+  it('does not expose an internal recommendation command', async () => {
+    let error;
 
-    assert.equal(recommendation.template, 'vite-vue-admin');
-    assert.equal(recommendation.confidence, 0.88);
-    assert.match(recommendation.reason, /Vue/);
+    try {
+      await execFileAsync(process.execPath, [cliPath, 'recommend', '帮我做一个 Vue 管理后台', '--json'], {
+        cwd: path.resolve('.'),
+      });
+    } catch (caught) {
+      error = caught;
+    }
+
+    assert.equal(error?.code, 1);
+    const payload = JSON.parse(error.stdout);
+    assert.equal(payload.ok, false);
+    assert.equal(payload.code, 'UNKNOWN_COMMAND');
   });
 });

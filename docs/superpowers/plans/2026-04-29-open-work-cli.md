@@ -17,7 +17,7 @@
 - Create `runtime/openwork-cli/src/cli.js`: argument parsing and command dispatch.
 - Create `runtime/openwork-cli/src/output.js`: stable JSON and text output helpers.
 - Create `runtime/openwork-cli/src/errors.js`: typed CLI errors and error codes.
-- Create `runtime/openwork-cli/src/templateRegistry.js`: load templates, recommend templates, validate params.
+- Create `runtime/openwork-cli/src/templateRegistry.js`: load templates and validate params.
 - Create `runtime/openwork-cli/src/templateRender.js`: scan, conflict-check, render, and copy template files.
 - Create `runtime/openwork-cli/src/projectConfig.js`: read/write `.openwork/project.json` and `.openwork/runtime.json`.
 - Create `runtime/openwork-cli/src/runCommand.js`: run lifecycle commands and detached dev process.
@@ -41,7 +41,7 @@
 
 - [ ] **Step 1: Write failing tests**
 
-Test `loadTemplates()` lists bundled templates and `recommendTemplate()` maps "Vue 管理后台" to `vite-vue-admin`.
+Test `loadTemplates()` lists bundled templates and the CLI does not expose an internal recommendation command.
 
 - [ ] **Step 2: Run red test**
 
@@ -50,7 +50,7 @@ Expected: fails because package and modules do not exist.
 
 - [ ] **Step 3: Implement registry and CLI shell**
 
-Implement package metadata, executable bin, output helpers, error helpers, template loading, recommendation rules, and `templates` / `recommend` commands.
+Implement package metadata, executable bin, output helpers, error helpers, template loading, and the `templates` command.
 
 - [ ] **Step 4: Run green test**
 
@@ -133,5 +133,5 @@ Update current system status to say new workspaces are initialized by the contai
 
 Run: `cd runtime/openwork-cli && npm test`
 Run: `node runtime/openwork-cli/bin/openwork.js templates --json`
-Run: `node runtime/openwork-cli/bin/openwork.js recommend "帮我做一个 Vue 管理后台" --json`
+Run: `node runtime/openwork-cli/bin/openwork.js init smoke-app --template native-static --workspace "$(mktemp -d)" --json`
 Expected: all pass and JSON output is valid.

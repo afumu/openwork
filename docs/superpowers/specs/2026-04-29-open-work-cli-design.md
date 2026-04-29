@@ -54,7 +54,6 @@ runtime/openwork-cli/
     main.ts
     commands/
       templates.ts
-      recommend.ts
       init.ts
       dev.ts
       build.ts
@@ -113,36 +112,6 @@ JSON 输出：
     }
   ]
 }
-```
-
-### recommend
-
-根据用户原始需求做确定性模板推荐，供 Claude Code 辅助判断。它不替代 Claude Code 的意图识别，只提供稳定规则。
-
-```bash
-openwork recommend "帮我做一个 Vue 管理后台" --json
-```
-
-输出：
-
-```json
-{
-  "ok": true,
-  "template": "vite-vue-admin",
-  "confidence": 0.88,
-  "reason": "matched keywords: Vue, 管理后台"
-}
-```
-
-初始规则：
-
-```text
-纯 HTML / 单文件 / 不要框架 -> native-static
-Vue + 管理后台 / dashboard / admin -> vite-vue-admin
-Vue / SPA / 前端应用 -> vite-vue
-React / SPA / 前端应用 -> vite-react
-Next.js / SEO / SSR / 全栈 / 多页面 -> nextjs
-不确定 -> vite-react，confidence 低于 0.6 时建议 Claude Code 追问
 ```
 
 ### init
@@ -387,10 +356,11 @@ runtime 镜像中提供全局说明文件，例如 `/opt/openwork-cli/AGENTS.md`
 ```text
 When creating a new app in an empty workspace:
 1. Run `openwork templates --json`.
-2. Use `openwork recommend "<user request>" --json` when template choice is unclear.
-3. Run `openwork init --template <name> --install --dev`.
-4. Continue editing files under `/workspace`.
-5. Run `openwork build` or template validate command before reporting completion.
+2. Read the template descriptions and choose the closest template based on the user request.
+3. If the template choice is unclear, ask the user a short clarification instead of guessing through CLI rules.
+4. Run `openwork init --template <name> --install --dev`.
+5. Continue editing files under `/workspace`.
+6. Run `openwork build` or template validate command before reporting completion.
 ```
 
 每个模板自身也带 `AGENTS.md`，初始化后复制到项目根目录。
@@ -456,7 +426,6 @@ PROCESS_NOT_FOUND
 ## 验收标准
 
 - `openwork templates --json` 能列出内置模板。
-- `openwork recommend "帮我做一个 Vue 管理后台" --json` 返回 `vite-vue-admin`。
 - 空 `/workspace` 下执行 `openwork init --template native-static --json` 会生成项目和 `.openwork/project.json`。
 - 非空 `/workspace` 下不带 `--force` 执行 init 会失败并返回 `WORKSPACE_NOT_EMPTY` 或 `FILE_CONFLICT`。
 - `openwork dev/build/start` 能读取 `.openwork/project.json` 并执行对应命令。

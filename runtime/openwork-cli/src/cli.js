@@ -7,9 +7,9 @@ import {
   findTemplate,
   loadTemplateConfig,
   loadTemplates,
-  recommendTemplate,
   validateTemplateParams,
 } from './templateRegistry.js';
+import { OpenWorkCliError } from './errors.js';
 
 function hasFlag(args, flag) {
   return args.includes(flag);
@@ -102,15 +102,6 @@ export async function runCli(argv = process.argv.slice(2)) {
       return payload;
     }
 
-    if (command === 'recommend') {
-      const prompt = readPositional(args).join(' ');
-      const registry = await loadTemplates();
-      const recommendation = { ok: true, ...recommendTemplate(prompt, registry) };
-      if (json) printJson(recommendation);
-      else printText(`${recommendation.template} (${recommendation.confidence})`);
-      return recommendation;
-    }
-
     if (command === 'init') {
       const templateName = readOption(args, '--template', '-t');
       const workspace = readOption(args, '--workspace') || process.env.OPENWORK_WORKSPACE || process.cwd();
@@ -194,7 +185,7 @@ export async function runCli(argv = process.argv.slice(2)) {
       return payload;
     }
 
-    throw new Error(`Unknown command: ${command || '(empty)'}`);
+    throw new OpenWorkCliError('UNKNOWN_COMMAND', `Unknown command: ${command || '(empty)'}`);
   } catch (error) {
     const cliError = toCliError(error);
     if (json) printJson(formatError(cliError));
