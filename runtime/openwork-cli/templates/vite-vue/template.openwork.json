@@ -11,7 +11,7 @@
       },
       "port": {
         "type": "number",
-        "default": 5000,
+        "default": 9000,
         "minimum": 1024,
         "maximum": 65535
       }

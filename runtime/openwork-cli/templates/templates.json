@@ -18,7 +18,7 @@
       ],
       "location": "./native-static",
       "tags": ["html", "static", "game"],
-      "devPort": 5000
+      "devPort": 9000
     },
     {
       "name": "vite-react",
@@ -39,7 +39,7 @@
       ],
       "location": "./vite-react",
       "tags": ["react", "vite", "spa"],
-      "devPort": 5000
+      "devPort": 9000
     },
     {
       "name": "vite-vue",
@@ -60,7 +60,7 @@
       ],
       "location": "./vite-vue",
       "tags": ["vue", "vite", "spa"],
-      "devPort": 5000
+      "devPort": 9000
     },
     {
       "name": "vite-vue-admin",
@@ -83,7 +83,7 @@
       ],
       "location": "./vite-vue-admin",
       "tags": ["vue", "admin", "dashboard"],
-      "devPort": 5000
+      "devPort": 9000
     },
     {
       "name": "nextjs",
@@ -105,7 +105,7 @@
       ],
       "location": "./nextjs",
       "tags": ["react", "nextjs", "ssr"],
-      "devPort": 5000
+      "devPort": 9000
     }
   ]
 }

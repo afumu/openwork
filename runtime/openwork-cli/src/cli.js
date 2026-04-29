@@ -133,7 +133,7 @@ export async function runCli(argv = process.argv.slice(2)) {
       const context = {
         ...params,
         appName: params.appName || projectName || 'openwork-app',
-        devPort: params.port || template.devPort || 5000,
+        devPort: params.port || template.devPort || 9000,
         packageName: (params.appName || projectName || 'openwork-app').toLowerCase(),
       };
 

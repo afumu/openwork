@@ -112,7 +112,7 @@ JSON 输出：
       "avoidWhen": ["public marketing sites", "React-specific requests"],
       "examples": ["用户要一个管理后台、CRM、数据看板或表格系统"],
       "tags": ["vue", "admin", "dashboard"],
-      "devPort": 5000
+      "devPort": 9000
     }
   ]
 }
@@ -149,7 +149,7 @@ openwork init [name] --template <name> [--workspace /workspace] [--install] [--d
   "projectConfig": "/workspace/.openwork/project.json",
   "installed": true,
   "devStarted": true,
-  "port": 5000
+  "port": 9000
 }
 ```
 
@@ -189,7 +189,7 @@ openwork status [--workspace /workspace] [--json]
   "initialized": true,
   "workspace": "/workspace",
   "template": "vite-vue-admin",
-  "devPort": 5000,
+  "devPort": 9000,
   "dev": {
     "running": true,
     "pid": 12345
@@ -233,7 +233,7 @@ templates/vite-vue-admin/
       "description": "适合后台系统、表格、表单、登录和权限页面",
       "location": "./vite-vue-admin",
       "tags": ["vue", "admin", "dashboard"],
-      "devPort": 5000
+      "devPort": 9000
     }
   ]
 }
@@ -255,7 +255,7 @@ templates/vite-vue-admin/
       },
       "port": {
         "type": "number",
-        "default": 5000,
+        "default": 9000,
         "minimum": 1024,
         "maximum": 65535
       }
@@ -285,7 +285,7 @@ templates/vite-vue-admin/
   "template": "vite-vue-admin",
   "createdAt": "2026-04-29T00:00:00.000Z",
   "workspace": "/workspace",
-  "devPort": 5000,
+  "devPort": 9000,
   "commands": {
     "install": ["pnpm", "install", "--prefer-frozen-lockfile", "--prefer-offline"],
     "dev": ["bash", "./scripts/dev.sh"],
@@ -303,7 +303,7 @@ templates/vite-vue-admin/
   "dev": {
     "pid": 12345,
     "startedAt": "2026-04-29T00:00:00.000Z",
-    "port": 5000,
+    "port": 9000,
     "logFile": "/workspace/.openwork/logs/dev.log"
   }
 }
@@ -326,8 +326,8 @@ templates/vite-vue-admin/
 {
   "appName": "openwork-app",
   "packageName": "openwork-app",
-  "port": 5000,
-  "devPort": 5000
+  "port": 9000,
+  "devPort": 9000
 }
 ```
 

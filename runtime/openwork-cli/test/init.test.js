@@ -65,7 +65,7 @@ describe('openwork init', () => {
         'python',
         '-m',
         'http.server',
-        '5000',
+        '9000',
         '--bind',
         '0.0.0.0',
       ]);

@@ -21,7 +21,7 @@ async function createWorkspaceWithProjectConfig(commands) {
         template: 'native-static',
         createdAt: '2026-04-29T00:00:00.000Z',
         workspace,
-        devPort: 5000,
+        devPort: 9000,
         commands,
       },
       null,

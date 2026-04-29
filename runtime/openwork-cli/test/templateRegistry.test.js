@@ -17,6 +17,10 @@ describe('template registry', () => {
       registry.templates.map(template => template.name),
       ['native-static', 'vite-react', 'vite-vue', 'vite-vue-admin', 'nextjs'],
     );
+    assert.deepEqual(
+      registry.templates.map(template => template.devPort),
+      [9000, 9000, 9000, 9000, 9000],
+    );
   });
 
   it('prints model-facing selection guidance with template use cases', async () => {
