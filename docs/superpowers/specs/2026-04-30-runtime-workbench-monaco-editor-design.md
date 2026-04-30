@@ -1,308 +1,308 @@
-# Runtime Workbench Monaco Editor Design
+# Runtime 工作台 Monaco 编辑器设计
 
-## Goal
+## 目标
 
-Upgrade the chat project's right-side runtime workbench from a read-only file viewer into a practical web IDE surface.
+把 chat 项目右侧 runtime 工作台从“只读文件查看器”升级为一个可实际编码的 Web IDE 工作区。
 
-The first version should feel native to OpenWork instead of embedding a separate IDE inside the product. It should preserve the current chat, preview, runtime status, and OpenSandbox terminal experience while adding a full-featured editor workflow around Monaco Editor.
+第一版应该保持 OpenWork 原生体验，而不是把另一个独立 IDE 嵌进产品里。它需要保留当前聊天、预览、运行时状态和 OpenSandbox 终端体验，同时围绕 Monaco Editor 补齐完整编辑器工作流。
 
-## Current State
+## 当前状态
 
-The chat workbench already has the right outer shape:
+chat 工作台已经有了比较合适的外层结构：
 
-- `RuntimeWorkspacePanel.vue` owns the file tree, editor/preview tabs, runtime status, and terminal split panes.
-- `RuntimeFileExplorer.vue` renders workspace files from `runtime/workspace/list`.
-- `RuntimeCodeEditor.vue` uses CodeMirror 6 as a read-only single-file viewer.
-- `RuntimePreviewPane.vue` renders app preview, markdown, HTML, image, and text previews.
-- `RuntimeTerminalPane.vue` connects xterm to the OpenSandbox PTY WebSocket.
+- `RuntimeWorkspacePanel.vue` 负责文件树、编辑/预览页签、运行时状态和终端分栏。
+- `RuntimeFileExplorer.vue` 从 `runtime/workspace/list` 渲染工作区文件。
+- `RuntimeCodeEditor.vue` 目前用 CodeMirror 6 做只读、单文件代码查看。
+- `RuntimePreviewPane.vue` 支持应用预览、Markdown、HTML、图片和文本预览。
+- `RuntimeTerminalPane.vue` 用 xterm 连接 OpenSandbox PTY WebSocket。
 
-The backend currently exposes read-only workspace APIs:
+后端目前只提供只读工作区接口：
 
 - `POST /api/openwork/runtime/workspace/list`
 - `POST /api/openwork/runtime/workspace/read`
 - `POST /api/openwork/runtime/status`
 - `WS /api/openwork/runtime/terminal`
 
-OpenSandbox is the runtime direction. The service layer must continue to own authentication, user/group sandbox lookup, path normalization, and proxying. The frontend must not receive direct OpenSandbox endpoints.
+OpenSandbox 是当前运行时方向。`service` 层必须继续负责鉴权、用户和 group 对应 sandbox 的定位、路径归一化以及代理转发。前端不能直接拿到 OpenSandbox endpoint。
 
-## Selected Approach
+## 选型结论
 
-Use Monaco Editor as the editor core and keep the workbench shell in OpenWork.
+用 Monaco Editor 作为编辑器内核，继续保留 OpenWork 自己的工作台外壳。
 
-This gives users the familiar VS Code editing feel, minimap/search/selection behavior, diff support, keyboard shortcuts, and a clear path to language server integration, while avoiding the operational cost of running a full code-server or OpenVSCode instance per sandbox.
+这样可以获得接近 VS Code 的编辑体验，包括多光标、搜索、选择、minimap、快捷键、diff 能力和后续语言服务接入路径，同时避免每个 sandbox 都运行完整 code-server 或 OpenVSCode 带来的运维成本。
 
-CodeMirror remains useful in small modals such as `HtmlDialog.vue`, but the runtime workbench should move to Monaco because this surface is expected to become a real code workspace.
+CodeMirror 仍然可以保留在 `HtmlDialog.vue` 这类小型弹窗里使用，但 runtime 工作台应该迁移到 Monaco，因为这个区域的产品预期已经不再是“看文件”，而是“处理一个真实项目”。
 
-## Alternatives Considered
+## 备选方案
 
-### Keep CodeMirror 6
+### 继续使用 CodeMirror 6
 
-Pros:
+优点：
 
-- Already installed.
-- Small bundle and easy Vue integration.
-- MIT licensed and highly extensible.
+- 仓库里已经安装。
+- 包体小，Vue 集成简单。
+- MIT 许可，可扩展性不错。
 
-Cons:
+缺点：
 
-- The current implementation is read-only and remounts on every file/content change.
-- Building a full IDE experience requires more custom work.
-- LSP, diagnostics, multi-file model management, and VS Code-like behavior are less direct than Monaco.
+- 当前实现是只读的，而且每次文件或内容变化都会重建编辑器。
+- 要做成完整 IDE 体验，需要自己补很多工作。
+- LSP、诊断、多文件模型管理、VS Code 风格交互都不如 Monaco 直接。
 
-Use only if bundle size becomes the dominant concern.
+只有当包体大小成为最高优先级时，才考虑继续沿用 CodeMirror。
 
-### Embed code-server or OpenVSCode Server
+### 嵌入 code-server 或 OpenVSCode Server
 
-Pros:
+优点：
 
-- Closest to a complete VS Code experience.
-- Includes file explorer, search, settings, terminal, extensions, and Git UI.
+- 最接近完整 VS Code 体验。
+- 文件管理、搜索、设置、终端、扩展、Git UI 都比较完整。
 
-Cons:
+缺点：
 
-- Adds a second IDE shell inside OpenWork's existing product shell.
-- Requires per-sandbox IDE process management, routing, auth, resource limits, and lifecycle cleanup.
-- Extension marketplace behavior differs from Microsoft VS Code builds.
-- Harder to integrate with OpenWork-specific chat, agent, preview, deploy, and billing workflows.
+- 会在 OpenWork 产品外壳里再套一个 IDE 外壳。
+- 需要处理每个 sandbox 的 IDE 进程管理、路由、鉴权、资源限制和生命周期清理。
+- 扩展市场行为和 Microsoft 官方 VS Code 不完全一致。
+- 更难和 OpenWork 自己的聊天、agent、预览、部署、计费流程深度整合。
 
-Keep this as a later "Open in full IDE" advanced mode, not the default embedded workbench.
+建议把它保留为后续“在完整 IDE 中打开”的高级模式，而不是默认嵌入工作台。
 
-### Adopt Eclipse Theia
+### 采用 Eclipse Theia
 
-Pros:
+优点：
 
-- Mature open source cloud IDE framework.
-- Good for white-label IDE products and custom domain-specific tools.
+- 成熟的开源云 IDE 框架。
+- 适合做白标 IDE 产品或领域专用开发工具。
 
-Cons:
+缺点：
 
-- Too heavy for the current goal.
-- Would shift the project toward building a separate IDE platform instead of improving the chat workbench.
+- 对当前目标来说太重。
+- 会把项目方向推向“另建一个 IDE 平台”，而不是增强 chat 右侧工作台。
 
-Do not use for the first implementation.
+第一版不采用 Theia。
 
-## Product Scope
+## 产品范围
 
-### Phase 1: Editable Monaco Workbench
+### 第一阶段：可编辑 Monaco 工作台
 
-The first implementation should deliver:
+第一版需要交付：
 
-- Monaco-based editor replacing `RuntimeCodeEditor.vue`.
-- Multiple open file tabs.
-- Dirty-state tracking per tab.
-- Save with toolbar button and `Cmd/Ctrl+S`.
-- Refresh/reload behavior when runtime files change.
-- File create, update, rename, delete through OpenWork service APIs.
-- Safe path handling: paths remain workspace-relative, normalized server-side, and cannot escape `/workspace`.
-- Existing app/file preview remains in `RuntimePreviewPane.vue`.
-- Existing terminal remains in `RuntimeTerminalPane.vue`.
+- 用 Monaco 编辑器替换 `RuntimeCodeEditor.vue`。
+- 支持多个已打开文件标签。
+- 每个标签维护未保存状态。
+- 支持工具栏保存按钮和 `Cmd/Ctrl+S`。
+- runtime 文件变化后支持刷新或重新加载。
+- 通过 OpenWork service API 支持文件创建、更新、重命名、删除。
+- 路径安全：前端只传工作区相对路径，后端统一归一化，不能逃逸 `/workspace`。
+- 继续使用现有 `RuntimePreviewPane.vue` 做应用和文件预览。
+- 继续使用现有 `RuntimeTerminalPane.vue` 做终端。
 
-Non-goals for phase 1:
+第一阶段不做：
 
-- VS Code extensions.
-- Full Git UI.
-- Debugger.
-- Multi-user collaboration.
-- Full language server integration.
+- VS Code 扩展。
+- 完整 Git UI。
+- Debugger。
+- 多人协作编辑。
+- 完整语言服务器集成。
 
-### Phase 2: IDE Workflow Polish
+### 第二阶段：IDE 工作流打磨
 
-Add after the editor/write path is stable:
+编辑和写入链路稳定后再补：
 
-- Workspace text search.
-- Diff view for external changes or agent-written edits.
-- Better file icons and empty states.
-- Context menu for file tree operations.
-- Rename/create/delete confirmations.
-- Optional autosave setting.
-- Split editor or preview side-by-side mode if layout pressure allows.
+- 工作区全文搜索。
+- 外部变更或 agent 修改文件后的 diff 视图。
+- 更好的文件图标和空状态。
+- 文件树右键菜单。
+- 重命名、创建、删除确认。
+- 可选自动保存设置。
+- 如果布局空间允许，支持编辑器和预览并排。
 
-### Phase 3: Language Intelligence
+### 第三阶段：语言智能
 
-Add language services incrementally:
+语言能力按优先级逐步接：
 
-- Built-in Monaco TypeScript/JavaScript support first.
-- JSON/CSS/HTML diagnostics next.
-- Optional LSP bridge through `monaco-languageclient` for Python or other server-backed languages.
-- Language servers should run inside the sandbox or a controlled service-side process, reached through authenticated service WebSocket endpoints.
+- 优先启用 Monaco 内置 TypeScript/JavaScript 能力。
+- 之后补 JSON/CSS/HTML 诊断。
+- 再按需要通过 `monaco-languageclient` 接 Python 或其他 LSP。
+- 语言服务器应运行在 sandbox 内，或运行在受控的 service 侧进程里，并通过带鉴权的 service WebSocket 连接到前端。
 
-## Architecture
+## 架构设计
 
-### Frontend Components
+### 前端组件
 
-Create a clearer editor boundary:
+需要把编辑器边界拆清楚：
 
 - `RuntimeWorkspacePanel.vue`
-  - Owns high-level layout and runtime polling.
-  - Owns active workbench mode: editor, preview, terminal/info panels.
-  - Delegates file-tab state to a composable.
+  - 负责高层布局和 runtime 轮询。
+  - 负责当前工作台模式：编辑器、预览、终端、信息面板。
+  - 把文件标签状态交给 composable 管理。
 
 - `RuntimeMonacoEditor.vue`
-  - Wraps Monaco lifecycle.
-  - Accepts active tab model and readonly/dirty/saving state.
-  - Emits content changes, save commands, and editor-ready events.
+  - 封装 Monaco 生命周期。
+  - 接收当前激活标签、只读状态、未保存状态和保存中状态。
+  - 发出内容变化、保存命令和编辑器 ready 事件。
 
 - `RuntimeEditorTabs.vue`
-  - Shows open files.
-  - Marks dirty tabs.
-  - Supports close and select.
+  - 展示已打开文件。
+  - 标记未保存状态。
+  - 支持关闭和切换标签。
 
 - `RuntimeFileExplorer.vue`
-  - Keeps tree rendering.
-  - Adds create, rename, delete events.
+  - 保留当前文件树渲染。
+  - 增加创建、重命名、删除事件。
 
 - `useRuntimeWorkspaceTabs.ts`
-  - Manages open tabs, active path, loaded file metadata, dirty state, and conflict state.
+  - 管理已打开标签、当前激活路径、已加载文件元数据、未保存状态和冲突状态。
 
 - `useRuntimeWorkspaceFiles.ts`
-  - Wraps list/read/write/create/delete/search API calls and normalization helpers.
+  - 封装 list/read/write/create/delete/search API 调用和路径归一化辅助逻辑。
 
-The panel should avoid becoming a large controller file. Editing state and file operations should move into composables as the workbench grows.
+随着工作台能力变多，`RuntimeWorkspacePanel.vue` 不应该继续膨胀成大控制器。编辑状态和文件操作逻辑要逐步移动到 composable 里。
 
-### Backend APIs
+### 后端 API
 
-Add service-owned endpoints:
+新增由 service 负责鉴权和转发的接口：
 
 - `POST /api/openwork/runtime/workspace/write`
-  - Input: `groupId`, `path`, `content`, optional `baseUpdatedAt`.
-  - Writes a UTF-8 text file.
-  - Returns updated file metadata and conflict information if the base revision is stale.
+  - 入参：`groupId`、`path`、`content`，可选 `baseUpdatedAt`。
+  - 写入 UTF-8 文本文件。
+  - 返回更新后的文件元数据；如果基准版本过旧，返回冲突信息。
 
 - `POST /api/openwork/runtime/workspace/create`
-  - Input: `groupId`, `path`, optional `content`, optional `kind`.
-  - Creates a file or directory.
+  - 入参：`groupId`、`path`，可选 `content`、`kind`。
+  - 创建文件或目录。
 
 - `POST /api/openwork/runtime/workspace/rename`
-  - Input: `groupId`, `fromPath`, `toPath`.
+  - 入参：`groupId`、`fromPath`、`toPath`。
 
 - `POST /api/openwork/runtime/workspace/delete`
-  - Input: `groupId`, `path`.
+  - 入参：`groupId`、`path`。
 
 - `POST /api/openwork/runtime/workspace/search`
-  - Input: `groupId`, `query`, optional include/exclude globs.
-  - Returns bounded matches with truncation metadata.
+  - 入参：`groupId`、`query`，可选 include/exclude globs。
+  - 返回有上限的搜索结果和截断信息。
 
-Each endpoint must:
+每个接口都必须：
 
-- Require JWT auth.
-- Verify the group is a project group.
-- Resolve the current user/group sandbox through OpenSandbox runtime service.
-- Normalize and validate paths against the configured workspace root.
-- Reject path traversal, absolute paths outside workspace, huge payloads, and binary write attempts.
-- Return localized, user-safe errors through the existing response shape.
+- 要求 JWT 鉴权。
+- 校验 group 是项目组。
+- 通过 OpenSandbox runtime service 定位当前用户和 group 对应的 sandbox。
+- 基于配置的 workspace root 做路径归一化和校验。
+- 拒绝路径穿越、workspace 外绝对路径、过大 payload 和二进制写入。
+- 通过现有响应风格返回本地化、用户可理解的错误。
 
-### OpenSandbox File Operations
+### OpenSandbox 文件操作
 
-The existing runtime service already runs bounded Node scripts inside the sandbox for list/read. Extend that pattern for write/create/rename/delete/search.
+现有 runtime service 已经通过在 sandbox 内执行有边界的 Node 脚本来实现 list/read。write/create/rename/delete/search 也沿用这个模式。
 
-Use Node filesystem APIs inside the sandbox rather than shell string manipulation. Continue passing arguments separately and quoting command strings with existing helpers.
+文件操作应使用 sandbox 内的 Node filesystem API，不要用 shell 字符串拼接做文件操作。命令参数继续单独传入，并沿用现有 shell quote 辅助函数。
 
-Recommended limits:
+建议限制：
 
-- Maximum editable text file size: 1 MB for phase 1.
-- Maximum write payload: 2 MB.
-- Maximum list result: keep existing bounded list behavior.
-- Maximum search matches: 200 files or 1000 line matches, whichever comes first.
+- 第一阶段可编辑文本文件最大 1 MB。
+- 单次写入 payload 最大 2 MB。
+- 文件列表继续沿用当前有上限的行为。
+- 搜索最多返回 200 个文件或 1000 条行匹配，以先达到者为准。
 
-Binary files should remain preview/download-only in phase 1.
+二进制文件第一阶段只支持预览或下载，不支持编辑。
 
-## Data Flow
+## 数据流
 
-### Open File
+### 打开文件
 
-1. User selects a file in the tree.
-2. Frontend opens an existing tab if present.
-3. If absent, frontend calls `workspace/read`.
-4. `useRuntimeWorkspaceTabs` creates a Monaco model keyed by path.
-5. Active tab becomes editable unless the file is binary, too large, or truncated.
+1. 用户在文件树中选择文件。
+2. 前端如果已有对应标签，则直接切换到该标签。
+3. 如果没有标签，则调用 `workspace/read`。
+4. `useRuntimeWorkspaceTabs` 根据路径创建 Monaco model。
+5. 如果文件不是二进制、未超限且未截断，标签进入可编辑状态。
 
-### Save File
+### 保存文件
 
-1. User presses `Cmd/Ctrl+S` or clicks save.
-2. Frontend sends `workspace/write` with current content and `baseUpdatedAt`.
-3. Backend validates path and writes into the sandbox workspace.
-4. Backend returns new `updatedAt`, size, type, and path.
-5. Frontend clears dirty state and refreshes manifest.
-6. Preview iframe/markdown pane reloads if the saved file is currently previewed.
+1. 用户按 `Cmd/Ctrl+S` 或点击保存。
+2. 前端携带当前内容和 `baseUpdatedAt` 调用 `workspace/write`。
+3. 后端校验路径并写入 sandbox workspace。
+4. 后端返回新的 `updatedAt`、size、type 和 path。
+5. 前端清除该标签未保存状态，并刷新 manifest。
+6. 如果当前文件正在预览，刷新 iframe 或 Markdown 预览。
 
-### External Change
+### 外部变更
 
-Agent or terminal commands may update files while a tab is open.
+agent 或终端命令可能在用户打开文件时修改同一个文件。
 
-When polling detects a newer `updatedAt` for an open clean tab, refresh the tab silently. When the tab is dirty, show a conflict state with actions:
+轮询发现打开中的干净标签有更新时，前端可以静默刷新内容。轮询发现打开中的未保存标签有更新时，进入冲突状态，并提供操作：
 
-- Keep my changes.
-- Reload from workspace.
-- View diff.
+- 保留我的修改。
+- 从工作区重新加载。
+- 查看 diff。
 
-Phase 1 can implement keep/reload and reserve diff for phase 2.
+第一阶段可以先做“保留/重新加载”，diff 放到第二阶段。
 
-## UX Rules
+## 交互规则
 
-- The workbench stays visually integrated with chat.
-- Editor, preview, and terminal should remain visible through split panes.
-- Save status should be explicit but quiet: dirty dot, saving spinner, saved timestamp, or short toolbar message.
-- Destructive file actions require confirmation.
-- The UI must remain usable when no runtime exists yet: show a clear empty state and allow refresh.
-- The user should never see raw OpenSandbox endpoints or internal sandbox metadata unless opening the info panel.
+- 工作台视觉上继续融入 chat 页面。
+- 编辑器、预览和终端继续通过分栏保持可见。
+- 保存状态要明确但克制：未保存圆点、保存中状态、已保存时间或短暂 toolbar 提示即可。
+- 删除、覆盖、重命名这类破坏性操作必须确认。
+- 没有 runtime 时，界面应展示清晰空状态并允许用户刷新。
+- 除非用户打开信息面板，否则不要暴露原始 OpenSandbox endpoint 或内部 sandbox 元数据。
 
-## Error Handling
+## 错误处理
 
-Handle these cases explicitly:
+需要明确处理这些情况：
 
-- Runtime does not exist yet.
-- Workspace list/read/write command fails.
-- File was deleted while open.
-- File changed outside the editor.
-- File is too large or binary.
-- Path is invalid or escapes the workspace.
-- Sandbox is stopped or expired.
+- runtime 尚未创建。
+- 工作区 list/read/write 命令失败。
+- 打开的文件被删除。
+- 文件在编辑器外发生变化。
+- 文件过大或是二进制。
+- 路径非法或逃逸 workspace。
+- sandbox 已停止或过期。
 
-Frontend errors should be shown in the existing toolbar/error strip style, with retry where useful.
+前端错误沿用当前 toolbar/error strip 风格展示；适合重试的场景提供重试入口。
 
-## Testing
+## 测试
 
-### Frontend
+### 前端
 
-Add focused tests for:
+补充聚焦测试：
 
-- Tab state and dirty state transitions.
-- Save command calls the correct API.
-- External clean-tab updates refresh content.
-- External dirty-tab updates enter conflict state.
-- File tree actions emit create/rename/delete events.
-- Existing project-mode tests continue to show the workbench only for project groups.
+- 标签状态和未保存状态转换。
+- 保存命令调用正确 API。
+- 外部更新干净标签时刷新内容。
+- 外部更新未保存标签时进入冲突状态。
+- 文件树操作正确发出 create/rename/delete 事件。
+- 现有 project-mode 测试继续保证只有项目组显示工作台。
 
-### Backend
+### 后端
 
-Add service/runtime tests for:
+补充 service/runtime 测试：
 
-- Write creates/updates files.
-- Create directory and file behavior.
-- Rename and delete behavior.
-- Path traversal rejection.
-- Payload size rejection.
-- Missing runtime behavior.
-- Search truncation behavior.
+- write 创建或更新文件。
+- 创建目录和文件。
+- rename 和 delete 行为。
+- 拒绝路径穿越。
+- 拒绝过大 payload。
+- runtime 缺失时的行为。
+- search 截断行为。
 
-### Manual Verification
+### 手动验证
 
-Run:
+运行：
 
 - `cd chat && pnpm test`
 - `cd chat && pnpm type-check`
-- relevant service tests for runtime workspace APIs
+- runtime workspace API 相关 service 测试
 
-Then verify in browser:
+再在浏览器中验证：
 
-- Open project group.
-- Open multiple files.
-- Edit and save.
-- Confirm preview updates.
-- Create, rename, delete a file.
-- Use terminal to edit a file and confirm external-change handling.
+- 打开项目组。
+- 打开多个文件。
+- 编辑并保存。
+- 确认预览更新。
+- 创建、重命名、删除文件。
+- 用终端修改文件，确认外部变更处理。
 
-## References
+## 参考资料
 
 - Monaco Editor: https://github.com/microsoft/monaco-editor
 - CodeMirror: https://codemirror.net/
