@@ -17,6 +17,7 @@ import {
 import { fetchModelBaseConfigAPI } from '@/api/models'
 import { fetchQueryPluginsAPI } from '@/api/plugin'
 import { normalizeGroupType } from '@/views/chat/groupMode'
+import { resolveActiveGroupId } from '@/views/chat/groupRoute'
 import { useGlobalStoreWithOut } from '../global'
 
 const useGlobalStore = useGlobalStoreWithOut()
@@ -157,7 +158,7 @@ export const useChatStore = defineStore('chat-store', {
     },
 
     /* 查询我的对话组 */
-    async queryMyGroup() {
+    async queryMyGroup(options?: { preferredGroupId?: number | string | null }) {
       const res: any = await fetchQueryGroupAPI()
       this.groupList = [
         ...res.data.map((item: any) => {
@@ -199,11 +200,13 @@ export const useChatStore = defineStore('chat-store', {
         }),
       ]
 
-      const isHasActive = this.groupList.some(
-        (item: { uuid: any }) => Number(item.uuid) === Number(this.active)
+      const nextActiveGroupId = resolveActiveGroupId(
+        this.groupList,
+        this.active,
+        options?.preferredGroupId
       )
-      if (!this.active || !isHasActive) {
-        this.groupList.length && this.setActiveGroup(this.groupList[0].uuid)
+      if (nextActiveGroupId && Number(this.active) !== nextActiveGroupId) {
+        await this.setActiveGroup(nextActiveGroupId)
       }
       // 如果 groupList 为空，新建一个对话组
       if (this.groupList.length === 0) {

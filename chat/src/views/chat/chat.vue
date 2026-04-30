@@ -6,16 +6,26 @@ import SettingsDialog from '@/components/SettingsDialog.vue'
 import { useBasicLayout } from '@/hooks/useBasicLayout'
 import { useAppStore, useAuthStore, useChatStore, useGlobalStoreWithOut } from '@/store'
 import { message } from '@/utils/message'
-import { computed, onMounted, provide, watch } from 'vue'
+import { computed, onMounted, provide, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import ChatBase from './chatBase.vue'
+import {
+  buildGroupRouteQuery,
+  parseRouteGroupId,
+  resolveActiveGroupId,
+  shouldSyncActiveGroupToRoute,
+} from './groupRoute'
 
 const ms = message()
 const appStore = useAppStore()
 const chatStore = useChatStore()
 const authStore = useAuthStore()
+const route = useRoute()
+const router = useRouter()
 const { isMobile } = useBasicLayout()
 const isLogin = computed(() => authStore.isLogin)
 const collapsed = computed(() => appStore.siderCollapsed)
+const isApplyingRouteGroup = ref(false)
 // const startX = ref(0)
 // const endX = ref(0)
 
@@ -26,10 +36,58 @@ const isStreamIn = computed(() => {
 
 watch(isLogin, async (newVal, oldVal) => {
   if (newVal && !oldVal) {
-    await chatStore.queryMyGroup()
+    await chatStore.queryMyGroup({ preferredGroupId: parseRouteGroupId(route.query) })
     // 检查 URL 是否包含查询参数或哈希值
   }
 })
+
+async function replaceActiveGroupInRoute(activeGroupId: number) {
+  if (!shouldSyncActiveGroupToRoute(activeGroupId, route.query)) return
+
+  await router.replace({
+    query: buildGroupRouteQuery(route.query, activeGroupId),
+  })
+}
+
+async function applyRouteGroupId() {
+  const routeGroupId = parseRouteGroupId(route.query)
+  if (!routeGroupId || !chatStore.groupList.length) return
+
+  const nextActiveGroupId = resolveActiveGroupId(
+    chatStore.groupList,
+    chatStore.active,
+    routeGroupId
+  )
+  if (!nextActiveGroupId) return
+
+  if (Number(chatStore.active) !== nextActiveGroupId) {
+    isApplyingRouteGroup.value = true
+    try {
+      await chatStore.setActiveGroup(nextActiveGroupId)
+    } finally {
+      isApplyingRouteGroup.value = false
+    }
+  }
+
+  await replaceActiveGroupInRoute(nextActiveGroupId)
+}
+
+watch(
+  [() => route.query.groupId, () => chatStore.groupList.map(group => group.uuid).join(',')],
+  () => {
+    void applyRouteGroupId()
+  },
+  { flush: 'post' }
+)
+
+watch(
+  () => chatStore.active,
+  activeGroupId => {
+    if (isApplyingRouteGroup.value) return
+    void replaceActiveGroupInRoute(activeGroupId)
+  },
+  { flush: 'post' }
+)
 
 const getMobileClass = computed(() => {
   if (isMobile.value) return ['rounded-none', 'shadow-none']

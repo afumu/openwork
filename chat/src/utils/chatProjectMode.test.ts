@@ -26,6 +26,16 @@ test('sidebar renders separate conversation and project sections', () => {
   assert.match(siderListSource, /项目/)
 })
 
+test('sidebar prioritizes project section before conversation history', () => {
+  assert.ok(siderListSource.indexOf('项目') < siderListSource.indexOf('对话记录'))
+})
+
+test('sidebar folds conversation history behind a preview list', () => {
+  assert.match(siderListSource, /CONVERSATION_PREVIEW_LIMIT\s*=\s*15/)
+  assert.match(siderListSource, /visibleConversationList/)
+  assert.match(siderListSource, /showMoreConversations/)
+})
+
 test('empty composer exposes ordinary chat and project mode tabs', () => {
   assert.match(footerSource, /selectedGroupType/)
   assert.match(footerSource, /普通对话/)

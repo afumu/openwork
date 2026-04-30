@@ -7,6 +7,8 @@ import { DIALOG_TABS } from '@/store/modules/global'
 import { ExpandRight, User, VipOne } from '@icon-park/vue-next'
 import type { CSSProperties } from 'vue'
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { parseRouteGroupId } from '../../groupRoute'
 import List from './List.vue'
 
 const useGlobalStore = useGlobalStoreWithOut()
@@ -14,6 +16,7 @@ const useGlobalStore = useGlobalStoreWithOut()
 const appStore = useAppStore()
 const chatStore = useChatStore()
 const authStore = useAuthStore()
+const route = useRoute()
 
 const model3AnimationRef = ref<number | null>(null)
 const model4AnimationRef = ref<number | null>(null)
@@ -203,7 +206,7 @@ watch(
 
 onMounted(() => {
   chatStore.queryPlugins()
-  chatStore.queryMyGroup()
+  chatStore.queryMyGroup({ preferredGroupId: parseRouteGroupId(route.query) })
 })
 
 function openSettings(tab?: number) {

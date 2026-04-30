@@ -43,8 +43,10 @@ const tryParseJson = inject('tryParseJson') as
 const customKeyId = ref(100)
 const appCatStore = useAppCatStore()
 const showMoreSticky = ref(false)
+const showMoreConversations = ref(false)
 const showMoreMineApps = ref(false)
 const showAllApps = ref(true)
+const CONVERSATION_PREVIEW_LIMIT = 15
 
 const dataSources = computed(() => chatStore.groupList)
 const groupKeyWord = computed(() => chatStore.groupKeyWord)
@@ -75,6 +77,11 @@ const unstickyGroups = computed(() =>
 const groupedHistory = computed(() => partitionGroupsByType(unstickyGroups.value))
 const conversationList = computed(() => groupedHistory.value.conversations)
 const projectList = computed(() => groupedHistory.value.projects)
+const visibleConversationList = computed(() =>
+  showMoreConversations.value
+    ? conversationList.value
+    : conversationList.value.slice(0, CONVERSATION_PREVIEW_LIMIT)
+)
 
 /* 选中切换对话 */
 async function handleSelect(group: Chat.History) {
@@ -316,6 +323,20 @@ const isAppsHovered = ref(false)
           <Up v-else theme="outline" size="20" />
         </button>
 
+        <div class="flex items-center justify-between mt-3 mb-1 group">
+          <p class="text-xs font-bold">
+            项目
+            <span class="ml-1">({{ projectList.length }})</span>
+          </p>
+        </div>
+        <ListItem
+          v-if="projectList.length"
+          :key="4000 + customKeyId"
+          :data-sources="projectList"
+          @select="handleSelect"
+          @delete="handleDelete"
+        />
+
         <div
           class="flex items-center justify-between mt-3 mb-1 group"
           @mouseenter="isHistoryHovered = true"
@@ -338,24 +359,20 @@ const isAppsHovered = ref(false)
         <ListItem
           v-if="conversationList.length"
           :key="3000 + customKeyId"
-          :data-sources="conversationList"
+          :data-sources="visibleConversationList"
           @select="handleSelect"
           @delete="handleDelete"
         />
 
-        <div class="flex items-center justify-between mt-3 mb-1 group">
-          <p class="text-xs font-bold">
-            项目
-            <span class="ml-1">({{ projectList.length }})</span>
-          </p>
-        </div>
-        <ListItem
-          v-if="projectList.length"
-          :key="4000 + customKeyId"
-          :data-sources="projectList"
-          @select="handleSelect"
-          @delete="handleDelete"
-        />
+        <button
+          class="relative flex items-center gap-3 px-3 break-all rounded-lg cursor-pointer text-gray-900 dark:text-gray-400 text-xs font-bold"
+          v-if="conversationList.length > CONVERSATION_PREVIEW_LIMIT"
+          @click="showMoreConversations = !showMoreConversations"
+        >
+          {{ showMoreConversations ? t('chat.collapse') : t('chat.more') }}
+          <Down v-if="!showMoreConversations" theme="outline" size="20" />
+          <Up v-else theme="outline" size="20" />
+        </button>
       </template>
     </div>
   </div>
