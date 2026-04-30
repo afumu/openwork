@@ -1,5 +1,7 @@
 # Chat Runtime Workspace Panel Implementation Plan
 
+> **Status:** Historical / superseded. This plan describes the earlier tabbed, mostly read-only workspace panel direction. The current implemented direction is the Monaco editable runtime workbench and OpenSandbox workspace API documented in `docs/current/runtime-workspace-api.md`, `docs/current/system-status.md`, and `docs/superpowers/specs/2026-04-30-runtime-workbench-monaco-editor-design.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Turn the desktop chat screen into a two-pane workspace: conversation on the left, runtime workspace information on the right with files, preview, terminal log, and container info.

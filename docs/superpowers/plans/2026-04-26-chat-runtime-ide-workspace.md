@@ -1,5 +1,7 @@
 # Chat Runtime IDE Workspace Implementation Plan
 
+> **Status:** Historical / superseded. This plan captures the intermediate CodeMirror/xterm IDE shell direction. The current implemented workbench uses Monaco with editable workspace APIs; use `docs/current/runtime-workspace-api.md`, `docs/current/system-status.md`, and `docs/superpowers/specs/2026-04-30-runtime-workbench-monaco-editor-design.md` for current facts.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the current right-side runtime workspace tabs with an embedded IDE-style workspace matching the provided reference: file explorer on the left, preview/code tabs in the main area, terminal at the bottom, and compact runtime actions/status.
