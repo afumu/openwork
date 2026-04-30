@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import {
+  createRuntimeWorkspaceEntryAPI,
+  deleteRuntimeWorkspaceEntryAPI,
   fetchRuntimeStatusAPI,
   fetchRuntimeWorkspaceListAPI,
   fetchRuntimeWorkspaceReadAPI,
+  renameRuntimeWorkspaceEntryAPI,
+  writeRuntimeWorkspaceFileAPI,
+  type RuntimeWorkspaceEntry,
 } from '@/api/runtime'
 import { copyText } from '@/utils/format'
-import { shouldRefreshSelectedArtifact } from '@/utils/artifactPreview'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { Pane, Splitpanes } from 'splitpanes'
 import 'splitpanes/dist/splitpanes.css'
@@ -25,9 +29,11 @@ import RuntimeCodeEditor from './RuntimeCodeEditor.vue'
 import RuntimeFileExplorer from './RuntimeFileExplorer.vue'
 import RuntimePreviewPane from './RuntimePreviewPane.vue'
 import RuntimeTerminalPane from './RuntimeTerminalPane.vue'
+import { useRuntimeWorkspaceTabs } from './useRuntimeWorkspaceTabs'
 import type {
   ArtifactManifest,
   ArtifactReadResult,
+  ArtifactWorkspaceFileItem,
   ArtifactWorkspaceTreeItem,
   RuntimeStatusPayload,
 } from './types'
@@ -47,8 +53,6 @@ const manifest = ref<ArtifactManifest | null>(null)
 const loadingArtifacts = ref(false)
 const readingFile = ref(false)
 const loadError = ref('')
-const selectedPath = ref('')
-const selectedFile = ref<ArtifactReadResult | null>(null)
 const runtimeStatus = ref<RuntimeStatusPayload | null>(null)
 const runtimeLoading = ref(false)
 const pollTimer = ref<number | null>(null)
@@ -56,6 +60,21 @@ const showRuntimeInfo = ref(false)
 const toolbarMessage = ref('')
 const toolbarMessageTimer = ref<number | null>(null)
 const previewManualReloadKey = ref(0)
+
+const {
+  activePath,
+  activeTab,
+  closeDeletedCleanTabs,
+  closeTab,
+  keepLocalChanges,
+  markExternalUpdate,
+  markTabSaved,
+  resetTabs,
+  setActivePath,
+  tabs,
+  updateActiveContent,
+  upsertTab,
+} = useRuntimeWorkspaceTabs()
 
 const workspaceFiles = computed(() => flattenArtifactManifestFiles(manifest.value))
 
@@ -65,11 +84,23 @@ const workspaceTree = computed<ArtifactWorkspaceTreeItem[]>(() => {
   return buildWorkspaceTreeFromFiles(workspaceFiles.value)
 })
 
-const normalizedSelectedPath = computed(() => normalizeWorkspacePath(selectedPath.value))
+const selectedPath = computed(() => activePath.value)
+const normalizedSelectedPath = computed(() => normalizeWorkspacePath(activePath.value))
 
 const selectedFileRecord = computed(
   () => workspaceFiles.value.find(file => file.path === normalizedSelectedPath.value) || null
 )
+
+const selectedFile = computed<ArtifactReadResult | null>(() => {
+  const tab = activeTab.value
+  if (!tab) return null
+  return {
+    ...tab.file,
+    content: tab.content,
+    path: tab.path,
+    size: tab.content.length,
+  }
+})
 
 const selectedTitle = computed(() => resolveIdeTabTitle(selectedFile.value))
 
@@ -86,14 +117,16 @@ const runtimeModeText = computed(() => {
 })
 
 const appPreview = computed(() => runtimeStatus.value?.preview || null)
-
 const fileCountText = computed(() => workspaceFiles.value.length || props.artifactCount || 0)
+const activeEditorContent = computed(() => activeTab.value?.content || '')
+const activeDirty = computed(() => Boolean(activeTab.value?.dirty))
+const activeSaving = computed(() => Boolean(activeTab.value?.saving))
 
 const runtimeInfoSummary = computed(() =>
   buildRuntimeInfoSummary({
     fileCount: Number(fileCountText.value),
     runtimeStatus: runtimeStatus.value,
-    selectedPath: selectedPath.value,
+    selectedPath: activePath.value,
     workspaceDir: manifest.value?.workspaceDir,
   })
 )
@@ -109,8 +142,7 @@ function normalizeWorkspacePath(path?: string) {
 }
 
 function clearSelection() {
-  selectedPath.value = ''
-  selectedFile.value = null
+  setActivePath('')
 }
 
 function clearPolling() {
@@ -149,7 +181,7 @@ function startPolling() {
 async function loadArtifacts(showLoading = true) {
   if (!props.groupId) {
     manifest.value = null
-    clearSelection()
+    resetTabs()
     return
   }
 
@@ -163,27 +195,18 @@ async function loadArtifacts(showLoading = true) {
 
     manifest.value = nextManifest
     const nextFiles = flattenArtifactManifestFiles(nextManifest)
-    const selectedStillExists = nextFiles.find(
-      file => file.path === normalizeWorkspacePath(selectedPath.value)
-    )
+    const pathSet = new Set(nextFiles.map(file => file.path))
+    closeDeletedCleanTabs(pathSet)
 
-    if (!selectedStillExists) {
-      clearSelection()
-    } else if (
-      shouldRefreshSelectedArtifact({
-        previewVisible: Boolean(selectedFile.value),
-        readResult: selectedFile.value,
-        selectedFile: selectedStillExists,
-        selectedPath: selectedPath.value,
-      })
-    ) {
-      void loadFile(selectedStillExists.path, selectedStillExists.runId, {
-        preserveCurrentContent: true,
-      })
-    }
+    nextFiles.forEach(file => {
+      const updateState = markExternalUpdate(file)
+      if (updateState === 'reload') void reloadOpenTab(file.path)
+    })
+
+    if (activePath.value && !pathSet.has(activePath.value) && !activeTab.value?.dirty) clearSelection()
   } catch (error: any) {
     manifest.value = null
-    clearSelection()
+    resetTabs()
     loadError.value = error?.message || '文件列表加载失败'
   } finally {
     loadingArtifacts.value = false
@@ -210,37 +233,51 @@ async function loadRuntimeStatus(showLoading = true) {
   }
 }
 
-async function loadFile(
-  path: string,
-  _runId?: string | null,
-  options: { preserveCurrentContent?: boolean } = {}
-) {
+async function loadFile(path: string, _runId?: string | null) {
   if (!props.groupId || !path) return
 
   const normalizedPath = normalizeWorkspacePath(path)
-  const keepCurrentContent =
-    options.preserveCurrentContent &&
-    normalizedSelectedPath.value === normalizedPath &&
-    selectedFile.value !== null
+  const existingTab = tabs.value.find(tab => tab.path === normalizedPath)
+  if (existingTab) {
+    setActivePath(normalizedPath)
+    activeMainTab.value = 'code'
+    return
+  }
 
-  selectedPath.value = normalizedPath
   activeMainTab.value = 'code'
-  if (!keepCurrentContent) readingFile.value = true
+  readingFile.value = true
   loadError.value = ''
 
   try {
-    const res: any = await fetchRuntimeWorkspaceReadAPI({
-      groupId: props.groupId,
-      path,
-    })
-    const nextReadResult = unwrapArtifactPayload<ArtifactReadResult>(res)
-    if (!nextReadResult) throw new Error('文件内容返回格式不正确')
-    selectedFile.value = nextReadResult
+    const file = await readWorkspaceFile(normalizedPath)
+    upsertTab(file)
   } catch (error: any) {
-    if (!keepCurrentContent) selectedFile.value = null
     loadError.value = error?.message || '文件读取失败'
   } finally {
-    if (!keepCurrentContent) readingFile.value = false
+    readingFile.value = false
+  }
+}
+
+async function readWorkspaceFile(path: string) {
+  const res: any = await fetchRuntimeWorkspaceReadAPI({
+    groupId: props.groupId,
+    path,
+  })
+  const nextReadResult = unwrapArtifactPayload<ArtifactReadResult>(res)
+  if (!nextReadResult) throw new Error('文件内容返回格式不正确')
+  return {
+    ...nextReadResult,
+    path: normalizeWorkspacePath(nextReadResult.path || path),
+  }
+}
+
+async function reloadOpenTab(path: string) {
+  if (!props.groupId || !path) return
+  try {
+    const file = await readWorkspaceFile(path)
+    upsertTab(file)
+  } catch (error: any) {
+    loadError.value = error?.message || '文件重新加载失败'
   }
 }
 
@@ -248,6 +285,14 @@ function unwrapRuntimeStatus(payload: any): RuntimeStatusPayload | null {
   if (!payload || typeof payload !== 'object') return null
   if ('groupId' in payload || 'status' in payload || 'mode' in payload) return payload
   if ('data' in payload) return unwrapRuntimeStatus(payload.data)
+  return null
+}
+
+function unwrapWorkspaceEntry(payload: any): RuntimeWorkspaceEntry | null {
+  if (!payload || typeof payload !== 'object') return null
+  if ('path' in payload && 'updatedAt' in payload) return payload as RuntimeWorkspaceEntry
+  if ('entry' in payload) return unwrapWorkspaceEntry(payload.entry)
+  if ('data' in payload) return unwrapWorkspaceEntry(payload.data)
   return null
 }
 
@@ -300,6 +345,104 @@ function openSelectedFile() {
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
 
+async function saveActiveFile() {
+  const tab = activeTab.value
+  if (!props.groupId || !tab || tab.saving) return
+  tab.saving = true
+  loadError.value = ''
+
+  try {
+    const res: any = await writeRuntimeWorkspaceFileAPI({
+      baseUpdatedAt: tab.baseUpdatedAt,
+      content: tab.content,
+      groupId: props.groupId,
+      path: tab.path,
+    })
+    const entry = unwrapWorkspaceEntry(res)
+    markTabSaved(tab.path, {
+      updatedAt: entry?.updatedAt || new Date().toISOString(),
+      type: entry?.type || tab.file.type,
+    } as ArtifactWorkspaceFileItem)
+    await loadArtifacts(false)
+    previewManualReloadKey.value += 1
+    showToolbarMessage('文件已保存')
+  } catch (error: any) {
+    loadError.value = error?.message || '文件保存失败'
+  } finally {
+    tab.saving = false
+  }
+}
+
+function closeEditorTab(path: string) {
+  return closeTab(path, tab => window.confirm(`文件 ${tab.path} 有未保存修改，确定关闭？`))
+}
+
+async function createFile() {
+  if (!props.groupId) return
+  const path = window.prompt('请输入新文件路径')?.trim()
+  if (!path) return
+
+  try {
+    const res: any = await createRuntimeWorkspaceEntryAPI({
+      content: '',
+      groupId: props.groupId,
+      kind: 'file',
+      path: normalizeWorkspacePath(path),
+    })
+    const entry = unwrapWorkspaceEntry(res)
+    await loadArtifacts(true)
+    await loadFile(entry?.path || path)
+    showToolbarMessage('文件已创建')
+  } catch (error: any) {
+    loadError.value = error?.message || '文件创建失败'
+  }
+}
+
+async function renameSelectedFile() {
+  if (!props.groupId || !activePath.value) {
+    showToolbarMessage('请先选择一个文件')
+    return
+  }
+  const toPath = window.prompt('请输入新的文件路径', activePath.value)?.trim()
+  if (!toPath || toPath === activePath.value) return
+
+  try {
+    const res: any = await renameRuntimeWorkspaceEntryAPI({
+      fromPath: activePath.value,
+      groupId: props.groupId,
+      toPath: normalizeWorkspacePath(toPath),
+    })
+    const entry = unwrapWorkspaceEntry(res)
+    if (!closeEditorTab(activePath.value)) return
+    await loadArtifacts(true)
+    await loadFile(entry?.path || toPath)
+    showToolbarMessage('文件已重命名')
+  } catch (error: any) {
+    loadError.value = error?.message || '文件重命名失败'
+  }
+}
+
+async function deleteSelectedFile() {
+  if (!props.groupId || !activePath.value) {
+    showToolbarMessage('请先选择一个文件')
+    return
+  }
+  if (!window.confirm(`确定删除 ${activePath.value}？`)) return
+
+  try {
+    await deleteRuntimeWorkspaceEntryAPI({
+      groupId: props.groupId,
+      path: activePath.value,
+    })
+    closeTab(activePath.value, () => true)
+    await loadArtifacts(true)
+    previewManualReloadKey.value += 1
+    showToolbarMessage('文件已删除')
+  } catch (error: any) {
+    loadError.value = error?.message || '文件删除失败'
+  }
+}
+
 function showDeployPending() {
   showToolbarMessage('部署能力尚未接入')
 }
@@ -313,7 +456,7 @@ watch(
     } else {
       manifest.value = null
       runtimeStatus.value = null
-      clearSelection()
+      resetTabs()
     }
     startPolling()
   },
@@ -356,7 +499,10 @@ onBeforeUnmount(() => {
           :loading="loadingArtifacts"
           :selected-path="selectedPath"
           :tree="workspaceTree"
+          @create-file="createFile"
+          @delete-selected="deleteSelectedFile"
           @refresh="loadArtifacts(true)"
+          @rename-selected="renameSelectedFile"
           @select-file="payload => loadFile(payload.path, payload.runId)"
         />
       </Pane>
@@ -383,13 +529,6 @@ onBeforeUnmount(() => {
               >
                 &lt;&gt; 代码
               </button>
-              <button
-                class="new-tab hidden 2xl:inline-flex"
-                type="button"
-                @click="openSelectedFile"
-              >
-                ＋ 新标签页
-              </button>
               <span class="hidden min-w-0 truncate pl-1 text-xs text-zinc-500 xl:block">
                 {{ selectedFileRecord?.path || selectedTitle }}
               </span>
@@ -405,6 +544,15 @@ onBeforeUnmount(() => {
               <span v-if="toolbarMessage" class="hidden text-xs text-zinc-500 xl:inline">
                 {{ toolbarMessage }}
               </span>
+              <button
+                class="save-button"
+                type="button"
+                :disabled="!activeDirty || activeSaving"
+                title="保存当前文件 (Cmd/Ctrl+S)"
+                @click="saveActiveFile"
+              >
+                {{ activeSaving ? '保存中' : activeDirty ? '保存' : '已保存' }}
+              </button>
               <button class="toolbar-icon" type="button" title="刷新工作区" @click="refreshWorkspace">
                 ⟳
               </button>
@@ -473,8 +621,16 @@ onBeforeUnmount(() => {
                 <RuntimeCodeEditor
                   v-show="activeMainTab === 'code'"
                   class="h-full"
-                  :file="selectedFile"
-                  readonly
+                  :active-path="activePath"
+                  :model-value="activeEditorContent"
+                  :saving="activeSaving"
+                  :tabs="tabs"
+                  @close-tab="closeEditorTab"
+                  @keep-conflict="keepLocalChanges"
+                  @reload-conflict="reloadOpenTab"
+                  @save="saveActiveFile"
+                  @select-tab="setActivePath"
+                  @update:model-value="updateActiveContent"
                 />
               </div>
             </Pane>
@@ -499,8 +655,7 @@ onBeforeUnmount(() => {
   color-scheme: light;
 }
 
-.main-tab,
-.new-tab {
+.main-tab {
   display: inline-flex;
   height: 34px;
   align-items: center;
@@ -515,7 +670,6 @@ onBeforeUnmount(() => {
 }
 
 .main-tab:hover,
-.new-tab:hover,
 .toolbar-icon:hover {
   background: #f4f4f5;
   color: #18181b;
@@ -529,10 +683,6 @@ onBeforeUnmount(() => {
 .main-tab-active {
   background: #e4e4e7;
   color: #18181b;
-}
-
-.new-tab {
-  color: #3f3f46;
 }
 
 .runtime-pill {
@@ -550,6 +700,29 @@ onBeforeUnmount(() => {
 .runtime-pill-active {
   background: rgba(34, 197, 94, 0.14);
   color: #15803d;
+}
+
+.save-button {
+  display: inline-flex;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid #2563eb;
+  padding: 0 12px;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.save-button:disabled {
+  border-color: #d4d4d8;
+  color: #a1a1aa;
+}
+
+.save-button:not(:disabled):hover {
+  background: #eff6ff;
 }
 
 .toolbar-icon {

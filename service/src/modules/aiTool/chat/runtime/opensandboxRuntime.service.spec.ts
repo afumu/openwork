@@ -389,7 +389,7 @@ describe('OpenSandboxRuntimeService', () => {
     const service = new OpenSandboxRuntimeService(client as any);
     const file = await service.readWorkspaceFile({
       groupId: 128,
-      path: '/workspace/README.md',
+      path: 'README.md',
       traceId: 'trace-1',
       userId: 42,
     });
@@ -409,6 +409,248 @@ describe('OpenSandboxRuntimeService', () => {
       type: 'markdown',
       updatedAt: '2026-04-29T00:00:00.000Z',
     });
+  });
+
+  it('writes a UTF-8 file in the existing OpenSandbox workspace', async () => {
+    const sandbox = createSandbox('sbx-existing');
+    sandbox.commands.run.mockResolvedValueOnce({
+      exitCode: 0,
+      logs: {
+        stdout: [
+          {
+            text: 'OPENWORK_WORKSPACE_JSON:{"kind":"file","name":"App.tsx","path":"src/App.tsx","size":11,"type":"typescript","updatedAt":"2026-04-29T00:00:00.000Z","runId":null,"source":"workspace_root"}',
+            timestamp: 1777380000000,
+          },
+        ],
+      },
+    });
+    const client = {
+      connectSandbox: jest.fn().mockResolvedValue(sandbox),
+      findSandboxByMetadata: jest.fn().mockResolvedValue({ id: 'sbx-existing' }),
+    };
+
+    const service = new OpenSandboxRuntimeService(client as any);
+    const entry = await service.writeWorkspaceFile({
+      content: 'hello world',
+      groupId: 128,
+      path: 'src/App.tsx',
+      traceId: 'trace-1',
+      userId: 42,
+    });
+
+    expect(sandbox.commands.run).toHaveBeenCalledWith(
+      expect.stringContaining("'src/App.tsx'"),
+      expect.objectContaining({ workingDirectory: '/' }),
+    );
+    expect(sandbox.commands.run.mock.calls[0][0]).toContain('assertWritableTargetInsideRoot');
+    expect(entry).toEqual(
+      expect.objectContaining({ kind: 'file', path: 'src/App.tsx', size: 11, type: 'typescript' }),
+    );
+  });
+
+  it('creates a directory in the existing OpenSandbox workspace', async () => {
+    const sandbox = createSandbox('sbx-existing');
+    sandbox.commands.run.mockResolvedValueOnce({
+      exitCode: 0,
+      logs: {
+        stdout: [
+          {
+            text: 'OPENWORK_WORKSPACE_JSON:{"kind":"directory","name":"components","path":"src/components","size":64,"type":"directory","updatedAt":"2026-04-29T00:00:00.000Z","runId":null,"source":"workspace_root"}',
+            timestamp: 1777380000000,
+          },
+        ],
+      },
+    });
+    const client = {
+      connectSandbox: jest.fn().mockResolvedValue(sandbox),
+      findSandboxByMetadata: jest.fn().mockResolvedValue({ id: 'sbx-existing' }),
+    };
+
+    const service = new OpenSandboxRuntimeService(client as any);
+    const entry = await service.createWorkspaceEntry({
+      groupId: 128,
+      kind: 'directory',
+      path: 'src/components',
+      traceId: 'trace-1',
+      userId: 42,
+    });
+
+    expect(sandbox.commands.run).toHaveBeenCalledWith(
+      expect.stringContaining("'directory'"),
+      expect.objectContaining({ workingDirectory: '/' }),
+    );
+    expect(sandbox.commands.run.mock.calls[0][0]).toContain('assertWritableTargetInsideRoot');
+    expect(entry).toEqual(expect.objectContaining({ kind: 'directory', path: 'src/components' }));
+  });
+
+  it('renames a workspace entry', async () => {
+    const sandbox = createSandbox('sbx-existing');
+    sandbox.commands.run.mockResolvedValueOnce({
+      exitCode: 0,
+      logs: {
+        stdout: [
+          {
+            text: 'OPENWORK_WORKSPACE_JSON:{"fromPath":"old.ts","toPath":"new.ts","entry":{"kind":"file","name":"new.ts","path":"new.ts","size":4,"type":"typescript","updatedAt":"2026-04-29T00:00:00.000Z","runId":null,"source":"workspace_root"}}',
+            timestamp: 1777380000000,
+          },
+        ],
+      },
+    });
+    const client = {
+      connectSandbox: jest.fn().mockResolvedValue(sandbox),
+      findSandboxByMetadata: jest.fn().mockResolvedValue({ id: 'sbx-existing' }),
+    };
+
+    const service = new OpenSandboxRuntimeService(client as any);
+    const result = await service.renameWorkspaceEntry({
+      fromPath: 'old.ts',
+      groupId: 128,
+      toPath: 'new.ts',
+      traceId: 'trace-1',
+      userId: 42,
+    });
+
+    expect(sandbox.commands.run.mock.calls[0][0]).toContain('assertWritableTargetInsideRoot');
+    expect(result).toEqual(expect.objectContaining({ fromPath: 'old.ts', toPath: 'new.ts' }));
+  });
+
+  it('deletes a workspace entry', async () => {
+    const sandbox = createSandbox('sbx-existing');
+    sandbox.commands.run.mockResolvedValueOnce({
+      exitCode: 0,
+      logs: {
+        stdout: [
+          {
+            text: 'OPENWORK_WORKSPACE_JSON:{"deleted":true,"path":"old.ts","kind":"file","type":"typescript","size":4,"updatedAt":"2026-04-29T00:00:00.000Z"}',
+            timestamp: 1777380000000,
+          },
+        ],
+      },
+    });
+    const client = {
+      connectSandbox: jest.fn().mockResolvedValue(sandbox),
+      findSandboxByMetadata: jest.fn().mockResolvedValue({ id: 'sbx-existing' }),
+    };
+
+    const service = new OpenSandboxRuntimeService(client as any);
+    const result = await service.deleteWorkspaceEntry({
+      groupId: 128,
+      path: 'old.ts',
+      traceId: 'trace-1',
+      userId: 42,
+    });
+
+    expect(result).toEqual(expect.objectContaining({ deleted: true, path: 'old.ts' }));
+  });
+
+  it('rejects traversal and hidden OpenWork runtime paths before running workspace commands', async () => {
+    const sandbox = createSandbox('sbx-existing');
+    const client = {
+      connectSandbox: jest.fn().mockResolvedValue(sandbox),
+      findSandboxByMetadata: jest.fn().mockResolvedValue({ id: 'sbx-existing' }),
+    };
+    const service = new OpenSandboxRuntimeService(client as any);
+
+    await expect(
+      service.writeWorkspaceFile({
+        content: 'oops',
+        groupId: 128,
+        path: '../escape.txt',
+        traceId: 'trace-1',
+        userId: 42,
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      service.readWorkspaceFile({
+        groupId: 128,
+        path: '.openwork/claude-session.json',
+        traceId: 'trace-1',
+        userId: 42,
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(sandbox.commands.run).not.toHaveBeenCalled();
+  });
+
+  it('rejects oversized workspace write payloads before running commands', async () => {
+    const sandbox = createSandbox('sbx-existing');
+    const client = {
+      connectSandbox: jest.fn().mockResolvedValue(sandbox),
+      findSandboxByMetadata: jest.fn().mockResolvedValue({ id: 'sbx-existing' }),
+    };
+    const service = new OpenSandboxRuntimeService(client as any);
+
+    await expect(
+      service.writeWorkspaceFile({
+        content: 'x'.repeat(2 * 1024 * 1024 + 1),
+        groupId: 128,
+        path: 'big.txt',
+        traceId: 'trace-1',
+        userId: 42,
+      }),
+    ).rejects.toMatchObject({ status: 413 });
+    expect(sandbox.commands.run).not.toHaveBeenCalled();
+  });
+
+  it('returns null for workspace mutations when runtime is missing', async () => {
+    const client = {
+      connectSandbox: jest.fn(),
+      findSandboxByMetadata: jest.fn().mockResolvedValue(null),
+    };
+    const service = new OpenSandboxRuntimeService(client as any);
+
+    await expect(
+      service.writeWorkspaceFile({
+        content: 'hello',
+        groupId: 128,
+        path: 'README.md',
+        traceId: 'trace-1',
+        userId: 42,
+      }),
+    ).resolves.toBeNull();
+    expect(client.connectSandbox).not.toHaveBeenCalled();
+  });
+
+  it('searches workspace content with bounded results', async () => {
+    const sandbox = createSandbox('sbx-existing');
+    sandbox.commands.run.mockResolvedValueOnce({
+      exitCode: 0,
+      logs: {
+        stdout: [
+          {
+            text: 'OPENWORK_WORKSPACE_JSON:{"results":[{"path":"src/App.tsx","matches":[{"line":1,"column":8,"preview":"export function App() {}"}]}],"truncated":true}',
+            timestamp: 1777380000000,
+          },
+        ],
+      },
+    });
+    const client = {
+      connectSandbox: jest.fn().mockResolvedValue(sandbox),
+      findSandboxByMetadata: jest.fn().mockResolvedValue({ id: 'sbx-existing' }),
+    };
+
+    const service = new OpenSandboxRuntimeService(client as any);
+    const result = await service.searchWorkspace({
+      groupId: 128,
+      query: 'function',
+      traceId: 'trace-1',
+      userId: 42,
+    });
+
+    expect(sandbox.commands.run).toHaveBeenCalledWith(
+      expect.stringContaining("'1000'"),
+      expect.objectContaining({ timeoutSeconds: 20, workingDirectory: '/' }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        results: [
+          {
+            matches: [{ column: 8, line: 1, preview: 'export function App() {}' }],
+            path: 'src/App.tsx',
+          },
+        ],
+        truncated: true,
+      }),
+    );
   });
 
   it('reads OpenWork project status from the existing workspace', async () => {

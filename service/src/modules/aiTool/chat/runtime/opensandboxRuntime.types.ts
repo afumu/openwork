@@ -58,6 +58,53 @@ export type RuntimeWorkspaceReadResult = {
   updatedAt: string;
 };
 
+export type RuntimeWorkspaceEntryKind = 'file' | 'directory';
+
+export type RuntimeWorkspaceEntryMetadata = RuntimeWorkspaceFileItem & {
+  kind: RuntimeWorkspaceEntryKind;
+};
+
+export type RuntimeWorkspaceWriteInput = {
+  path: string;
+  content: string;
+  baseUpdatedAt?: string;
+};
+
+export type RuntimeWorkspaceCreateInput = {
+  path: string;
+  content?: string;
+  kind?: RuntimeWorkspaceEntryKind;
+};
+
+export type RuntimeWorkspaceRenameResult = {
+  fromPath: string;
+  toPath: string;
+  entry: RuntimeWorkspaceEntryMetadata;
+};
+
+export type RuntimeWorkspaceDeleteResult = {
+  deleted: true;
+  path: string;
+  kind: RuntimeWorkspaceEntryKind;
+  size: number;
+  type: string;
+  updatedAt: string;
+};
+
+export type RuntimeWorkspaceSearchMatch = {
+  line: number;
+  column: number;
+  preview: string;
+};
+
+export type RuntimeWorkspaceSearchResult = {
+  results: Array<{
+    path: string;
+    matches: RuntimeWorkspaceSearchMatch[];
+  }>;
+  truncated: boolean;
+};
+
 export type OpenWorkProjectStatus = {
   ok?: boolean;
   name?: string;

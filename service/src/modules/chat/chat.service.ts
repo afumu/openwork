@@ -170,6 +170,21 @@ export class ChatService {
     };
   }
 
+  private async assertProjectRuntimeAvailable(groupId?: number) {
+    if (!groupId) {
+      throw new HttpException('缺少对话组ID', HttpStatus.BAD_REQUEST);
+    }
+
+    const groupInfo = await this.chatGroupService.getGroupInfoFromId(groupId);
+    if (!this.isProjectGroup(groupInfo)) {
+      throw new HttpException('普通对话没有项目运行时', HttpStatus.BAD_REQUEST);
+    }
+
+    if (!this.openSandboxRuntimeService) {
+      throw new HttpException('OpenSandbox runtime 不可用', HttpStatus.SERVICE_UNAVAILABLE);
+    }
+  }
+
   private logTrace(
     level: 'log' | 'debug' | 'warn' | 'error',
     traceId: string,
@@ -518,6 +533,169 @@ export class ChatService {
         error: serializeErrorForLog(error),
         groupId: body.groupId,
         path: body.path,
+        userId: req.user.id,
+      });
+      throw error;
+    }
+  }
+
+  async runtimeWorkspaceWrite(
+    body: { groupId?: number; path?: string; content?: string; baseUpdatedAt?: string },
+    req?: Request,
+  ) {
+    const traceId = this.createTraceId(req?.user?.id, body?.groupId);
+    await this.assertProjectRuntimeAvailable(body?.groupId);
+    if (!body.path) {
+      throw new HttpException('缺少文件路径', HttpStatus.BAD_REQUEST);
+    }
+    if (body.content === undefined || body.content === null) {
+      throw new HttpException('缺少文件内容', HttpStatus.BAD_REQUEST);
+    }
+
+    try {
+      const entry = await this.openSandboxRuntimeService.writeWorkspaceFile({
+        baseUpdatedAt: body.baseUpdatedAt,
+        content: String(body.content),
+        groupId: body.groupId,
+        path: body.path,
+        traceId,
+        userId: req.user.id,
+      });
+      if (!entry) {
+        throw new HttpException('当前对话尚未创建运行时容器', HttpStatus.NOT_FOUND);
+      }
+      return entry;
+    } catch (error) {
+      this.logTrace('warn', traceId, 'OpenSandbox runtime 工作区文件写入失败', {
+        error: serializeErrorForLog(error),
+        groupId: body.groupId,
+        path: body.path,
+        userId: req.user.id,
+      });
+      throw error;
+    }
+  }
+
+  async runtimeWorkspaceCreate(
+    body: { groupId?: number; path?: string; content?: string; kind?: 'file' | 'directory' },
+    req?: Request,
+  ) {
+    const traceId = this.createTraceId(req?.user?.id, body?.groupId);
+    await this.assertProjectRuntimeAvailable(body?.groupId);
+    if (!body.path) {
+      throw new HttpException('缺少文件路径', HttpStatus.BAD_REQUEST);
+    }
+
+    try {
+      const entry = await this.openSandboxRuntimeService.createWorkspaceEntry({
+        content: body.content,
+        groupId: body.groupId,
+        kind: body.kind,
+        path: body.path,
+        traceId,
+        userId: req.user.id,
+      });
+      if (!entry) {
+        throw new HttpException('当前对话尚未创建运行时容器', HttpStatus.NOT_FOUND);
+      }
+      return entry;
+    } catch (error) {
+      this.logTrace('warn', traceId, 'OpenSandbox runtime 工作区文件创建失败', {
+        error: serializeErrorForLog(error),
+        groupId: body.groupId,
+        path: body.path,
+        userId: req.user.id,
+      });
+      throw error;
+    }
+  }
+
+  async runtimeWorkspaceRename(
+    body: { groupId?: number; fromPath?: string; toPath?: string },
+    req?: Request,
+  ) {
+    const traceId = this.createTraceId(req?.user?.id, body?.groupId);
+    await this.assertProjectRuntimeAvailable(body?.groupId);
+    if (!body.fromPath || !body.toPath) {
+      throw new HttpException('缺少文件路径', HttpStatus.BAD_REQUEST);
+    }
+
+    try {
+      const result = await this.openSandboxRuntimeService.renameWorkspaceEntry({
+        fromPath: body.fromPath,
+        groupId: body.groupId,
+        toPath: body.toPath,
+        traceId,
+        userId: req.user.id,
+      });
+      if (!result) {
+        throw new HttpException('当前对话尚未创建运行时容器', HttpStatus.NOT_FOUND);
+      }
+      return result;
+    } catch (error) {
+      this.logTrace('warn', traceId, 'OpenSandbox runtime 工作区文件重命名失败', {
+        error: serializeErrorForLog(error),
+        fromPath: body.fromPath,
+        groupId: body.groupId,
+        toPath: body.toPath,
+        userId: req.user.id,
+      });
+      throw error;
+    }
+  }
+
+  async runtimeWorkspaceDelete(body: { groupId?: number; path?: string }, req?: Request) {
+    const traceId = this.createTraceId(req?.user?.id, body?.groupId);
+    await this.assertProjectRuntimeAvailable(body?.groupId);
+    if (!body.path) {
+      throw new HttpException('缺少文件路径', HttpStatus.BAD_REQUEST);
+    }
+
+    try {
+      const result = await this.openSandboxRuntimeService.deleteWorkspaceEntry({
+        groupId: body.groupId,
+        path: body.path,
+        traceId,
+        userId: req.user.id,
+      });
+      if (!result) {
+        throw new HttpException('当前对话尚未创建运行时容器', HttpStatus.NOT_FOUND);
+      }
+      return result;
+    } catch (error) {
+      this.logTrace('warn', traceId, 'OpenSandbox runtime 工作区文件删除失败', {
+        error: serializeErrorForLog(error),
+        groupId: body.groupId,
+        path: body.path,
+        userId: req.user.id,
+      });
+      throw error;
+    }
+  }
+
+  async runtimeWorkspaceSearch(body: { groupId?: number; query?: string }, req?: Request) {
+    const traceId = this.createTraceId(req?.user?.id, body?.groupId);
+    await this.assertProjectRuntimeAvailable(body?.groupId);
+    if (!body.query) {
+      throw new HttpException('缺少搜索关键词', HttpStatus.BAD_REQUEST);
+    }
+
+    try {
+      const result = await this.openSandboxRuntimeService.searchWorkspace({
+        groupId: body.groupId,
+        query: body.query,
+        traceId,
+        userId: req.user.id,
+      });
+      if (!result) {
+        throw new HttpException('当前对话尚未创建运行时容器', HttpStatus.NOT_FOUND);
+      }
+      return result;
+    } catch (error) {
+      this.logTrace('warn', traceId, 'OpenSandbox runtime 工作区文件搜索失败', {
+        error: serializeErrorForLog(error),
+        groupId: body.groupId,
+        query: body.query,
         userId: req.user.id,
       });
       throw error;

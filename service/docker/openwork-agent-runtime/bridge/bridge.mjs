@@ -15,6 +15,74 @@ const allowedTools = (process.env.CLAUDE_ALLOWED_TOOLS || "Bash,Read,Write,Edit,
   .split(",")
   .map((tool) => tool.trim())
   .filter(Boolean);
+const openworkDir = path.join(cwd, ".openwork");
+const claudeConfigDir = path.join(openworkDir, "claude-config");
+const claudeSessionPointerPath = path.join(openworkDir, "claude-session.json");
+process.env.CLAUDE_CONFIG_DIR = claudeConfigDir;
+
+async function ensureClaudePersistenceDirs() {
+  await fs.promises.mkdir(claudeConfigDir, { recursive: true });
+}
+
+function getStringValue(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function normalizeOpenworkMetadata(body = {}) {
+  return {
+    openworkSessionId: getStringValue(body.openworkSessionId) || getStringValue(body.session_id),
+    userId: getStringValue(body.userId) || getStringValue(body.user_id),
+    groupId: getStringValue(body.groupId) || getStringValue(body.group_id),
+  };
+}
+
+async function readSessionPointer() {
+  try {
+    const raw = await fs.promises.readFile(claudeSessionPointerPath, "utf8");
+    const pointer = JSON.parse(raw);
+    const claudeSessionId = getStringValue(pointer?.claudeSessionId);
+    if (pointer?.provider !== "claude" || pointer?.workspace !== cwd || !claudeSessionId) {
+      return null;
+    }
+    return { ...pointer, claudeSessionId };
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    console.warn(
+      JSON.stringify({
+        type: "session_pointer_ignored",
+        path: claudeSessionPointerPath,
+        message: error instanceof Error ? error.message : String(error),
+      }),
+    );
+    return null;
+  }
+}
+
+async function writeSessionPointer(claudeSessionId, metadata = {}) {
+  if (!getStringValue(claudeSessionId)) return;
+
+  const pointer = {
+    version: 1,
+    provider: "claude",
+    workspace: cwd,
+    claudeSessionId,
+    updatedAt: new Date().toISOString(),
+  };
+  for (const key of ["openworkSessionId", "userId", "groupId"]) {
+    const value = getStringValue(metadata[key]);
+    if (value) pointer[key] = value;
+  }
+
+  const tmpPath = `${claudeSessionPointerPath}.${process.pid}.${randomUUID()}.tmp`;
+  const file = await fs.promises.open(tmpPath, "w");
+  try {
+    await file.writeFile(`${JSON.stringify(pointer, null, 2)}\n`, "utf8");
+    await file.sync();
+  } finally {
+    await file.close();
+  }
+  await fs.promises.rename(tmpPath, claudeSessionPointerPath);
+}
 
 function findClaudeExecutable() {
   const platform = process.platform;
@@ -74,6 +142,9 @@ const clients = new Set();
 const eventLog = [];
 let nextEventId = 1;
 let activeSessionId = null;
+let persistedSessionId = null;
+let latestOpenworkMetadata = {};
+let pendingResumeSessionId = null;
 let status = "starting";
 let abortController = new AbortController();
 let sdkQuery = null;
@@ -110,13 +181,34 @@ function getContentItems(message) {
   return [];
 }
 
-function normalizeSdkMessage(message) {
+async function normalizeSdkMessage(message) {
   const normalized = [];
   const messageType = message?.type || "unknown";
   const subtype = message?.subtype;
 
   if (message.session_id && activeSessionId !== message.session_id) {
     activeSessionId = message.session_id;
+    if (persistedSessionId !== message.session_id) {
+      try {
+        await writeSessionPointer(message.session_id, latestOpenworkMetadata);
+        persistedSessionId = message.session_id;
+      } catch (error) {
+        normalized.push({
+          type: "error",
+          data: {
+            message: "failed to persist Claude session pointer",
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+      }
+    }
+    if (pendingResumeSessionId) {
+      normalized.push({
+        type: "session_resume_succeeded",
+        data: { session_id: pendingResumeSessionId },
+      });
+      pendingResumeSessionId = null;
+    }
     normalized.push({
       type: "session_started",
       data: {
@@ -124,6 +216,10 @@ function normalizeSdkMessage(message) {
         raw_type: messageType,
         subtype,
         cwd,
+        workspace: cwd,
+        claudeSessionId: message.session_id,
+        claude_config_dir: claudeConfigDir,
+        session_pointer_path: claudeSessionPointerPath,
         model: message.model || model,
       },
     });
@@ -191,45 +287,94 @@ function normalizeSdkMessage(message) {
   return normalized;
 }
 
+function buildQueryOptions(sessionOptions = {}) {
+  return {
+    cwd,
+    model,
+    abortController,
+    includePartialMessages: true,
+    allowedTools,
+    permissionMode,
+    pathToClaudeCodeExecutable,
+    allowDangerouslySkipPermissions: permissionMode === "bypassPermissions",
+    settingSources: ["user", "project", "local"],
+    systemPrompt: getOpenWorkSystemPromptConfig(),
+    persistSession: true,
+    ...sessionOptions,
+    env: {
+      ...process.env,
+      CLAUDE_CONFIG_DIR: claudeConfigDir,
+      CLAUDE_AGENT_SDK_CLIENT_APP: "opensandbox-supervisor-demo/0.1",
+    },
+  };
+}
+
+async function runAgentQuery(sessionOptions = {}) {
+  sdkQuery = query({
+    prompt: queue.generator(),
+    options: buildQueryOptions(sessionOptions),
+  });
+
+  status = "idle";
+  emit("bridge_ready", {
+    cwd,
+    model,
+    permission_mode: permissionMode,
+    allowed_tools: allowedTools,
+    path_to_claude_code_executable: pathToClaudeCodeExecutable,
+    claude_config_dir: claudeConfigDir,
+    session_pointer_path: claudeSessionPointerPath,
+    resume_session_id: sessionOptions.resume,
+    continue_session: sessionOptions.continue === true,
+  });
+
+  for await (const message of sdkQuery) {
+    for (const event of await normalizeSdkMessage(message)) {
+      emit(event.type, event.data);
+    }
+  }
+
+  status = "stopped";
+  emit("agent_stopped");
+}
+
 async function startAgent() {
   try {
-    sdkQuery = query({
-      prompt: queue.generator(),
-      options: {
-        cwd,
-        model,
-        abortController,
-        includePartialMessages: true,
-        allowedTools,
-        permissionMode,
-        pathToClaudeCodeExecutable,
-        allowDangerouslySkipPermissions: permissionMode === "bypassPermissions",
-        settingSources: ["user", "project", "local"],
-        systemPrompt: getOpenWorkSystemPromptConfig(),
-        env: {
-          ...process.env,
-          CLAUDE_AGENT_SDK_CLIENT_APP: "opensandbox-supervisor-demo/0.1",
-        },
-      },
-    });
+    await ensureClaudePersistenceDirs();
+    const pointer = await readSessionPointer();
+    persistedSessionId = pointer?.claudeSessionId || null;
 
-    status = "idle";
-    emit("bridge_ready", {
-      cwd,
-      model,
-      permission_mode: permissionMode,
-      allowed_tools: allowedTools,
-      path_to_claude_code_executable: pathToClaudeCodeExecutable,
-    });
+    if (pointer?.claudeSessionId) {
+      pendingResumeSessionId = pointer.claudeSessionId;
+      emit("session_resume_started", {
+        session_id: pointer.claudeSessionId,
+        workspace: cwd,
+        session_pointer_path: claudeSessionPointerPath,
+      });
+      try {
+        await runAgentQuery({ resume: pointer.claudeSessionId });
+        return;
+      } catch (error) {
+        pendingResumeSessionId = null;
+        emit("session_resume_failed", {
+          session_id: pointer.claudeSessionId,
+          message: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+      }
 
-    for await (const message of sdkQuery) {
-      for (const event of normalizeSdkMessage(message)) {
-        emit(event.type, event.data);
+      try {
+        await runAgentQuery({ continue: true });
+        return;
+      } catch (error) {
+        emit("session_continue_failed", {
+          message: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        });
       }
     }
 
-    status = "stopped";
-    emit("agent_stopped");
+    await runAgentQuery();
   } catch (error) {
     status = "failed";
     emit("error", {
@@ -303,9 +448,34 @@ const server = http.createServer(async (req, res) => {
       if (!text.trim()) {
         return sendJson(res, 400, { error: "text is required" });
       }
+      const incomingMetadata = normalizeOpenworkMetadata(body);
+      let metadataChanged = false;
+      for (const key of ["openworkSessionId", "userId", "groupId"]) {
+        if (incomingMetadata[key] && latestOpenworkMetadata[key] !== incomingMetadata[key]) {
+          latestOpenworkMetadata[key] = incomingMetadata[key];
+          metadataChanged = true;
+        }
+      }
+      if (activeSessionId && metadataChanged) {
+        try {
+          await writeSessionPointer(activeSessionId, latestOpenworkMetadata);
+          persistedSessionId = activeSessionId;
+        } catch (error) {
+          emit("error", {
+            message: "failed to update Claude session pointer metadata",
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
       status = "running";
       const depth = queue.push(text);
-      emit("user_message", { text, queue_depth: depth });
+      emit("user_message", {
+        text,
+        queue_depth: depth,
+        openwork_session_id: latestOpenworkMetadata.openworkSessionId,
+        user_id: latestOpenworkMetadata.userId,
+        group_id: latestOpenworkMetadata.groupId,
+      });
       return sendJson(res, 202, { ok: true, queue_depth: depth, status });
     } catch (error) {
       return sendJson(res, 400, {

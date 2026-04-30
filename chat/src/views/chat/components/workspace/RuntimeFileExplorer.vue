@@ -13,7 +13,10 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  (event: 'create-file'): void
+  (event: 'delete-selected'): void
   (event: 'refresh'): void
+  (event: 'rename-selected'): void
   (event: 'select-file', payload: { path: string; runId?: string | null }): void
 }>()
 
@@ -63,7 +66,9 @@ function handleSelect(node: any) {
       <span class="text-sm font-medium">Projects</span>
       <div class="flex items-center gap-1 text-zinc-500">
         <button class="ide-icon-btn" type="button" title="刷新" @click="emit('refresh')">↻</button>
-        <button class="ide-icon-btn" type="button" title="新文件">＋</button>
+        <button class="ide-icon-btn" type="button" title="新文件" @click="emit('create-file')">＋</button>
+        <button class="ide-icon-btn" type="button" title="重命名当前文件" @click="emit('rename-selected')">✎</button>
+        <button class="ide-icon-btn" type="button" title="删除当前文件" @click="emit('delete-selected')">−</button>
       </div>
     </header>
 

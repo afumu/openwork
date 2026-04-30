@@ -6,7 +6,15 @@ import { Body, Controller, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { ChatProcessDto } from './dto/chatProcess.dto';
 import { RuntimeStatusDto } from './dto/runtimeStatus.dto';
-import { RuntimeWorkspaceListDto, RuntimeWorkspaceReadDto } from './dto/runtimeWorkspace.dto';
+import {
+  RuntimeWorkspaceCreateDto,
+  RuntimeWorkspaceDeleteDto,
+  RuntimeWorkspaceListDto,
+  RuntimeWorkspaceReadDto,
+  RuntimeWorkspaceRenameDto,
+  RuntimeWorkspaceSearchDto,
+  RuntimeWorkspaceWriteDto,
+} from './dto/runtimeWorkspace.dto';
 import { StopChatDto } from './dto/stopChat.dto';
 
 @ApiTags('openwork')
@@ -52,6 +60,46 @@ export class ChatController {
   @ApiBearerAuth()
   runtimeWorkspaceRead(@Body() body: RuntimeWorkspaceReadDto, @Req() req: Request) {
     return this.chatService.runtimeWorkspaceRead(body, req);
+  }
+
+  @Post('runtime/workspace/write')
+  @ApiOperation({ summary: '写入当前对话运行时工作区文件' })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  runtimeWorkspaceWrite(@Body() body: RuntimeWorkspaceWriteDto, @Req() req: Request) {
+    return this.chatService.runtimeWorkspaceWrite(body, req);
+  }
+
+  @Post('runtime/workspace/create')
+  @ApiOperation({ summary: '创建当前对话运行时工作区文件或目录' })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  runtimeWorkspaceCreate(@Body() body: RuntimeWorkspaceCreateDto, @Req() req: Request) {
+    return this.chatService.runtimeWorkspaceCreate(body, req);
+  }
+
+  @Post('runtime/workspace/rename')
+  @ApiOperation({ summary: '重命名当前对话运行时工作区文件或目录' })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  runtimeWorkspaceRename(@Body() body: RuntimeWorkspaceRenameDto, @Req() req: Request) {
+    return this.chatService.runtimeWorkspaceRename(body, req);
+  }
+
+  @Post('runtime/workspace/delete')
+  @ApiOperation({ summary: '删除当前对话运行时工作区文件或目录' })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  runtimeWorkspaceDelete(@Body() body: RuntimeWorkspaceDeleteDto, @Req() req: Request) {
+    return this.chatService.runtimeWorkspaceDelete(body, req);
+  }
+
+  @Post('runtime/workspace/search')
+  @ApiOperation({ summary: '搜索当前对话运行时工作区文件内容' })
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  runtimeWorkspaceSearch(@Body() body: RuntimeWorkspaceSearchDto, @Req() req: Request) {
+    return this.chatService.runtimeWorkspaceSearch(body, req);
   }
 
   @Post('tts-process')

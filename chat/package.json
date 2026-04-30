@@ -64,6 +64,7 @@
     "markmap-view": "0.15.0",
     "md-editor-v3": "^4.21.3",
     "mermaid": "^11.6.0",
+    "monaco-editor": "^0.55.1",
     "npx": "^10.2.2",
     "office-text-extractor": "^3.0.3",
     "pdfjs-dist": "^5.2.133",

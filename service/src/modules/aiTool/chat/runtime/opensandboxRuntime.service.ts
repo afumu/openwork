@@ -9,8 +9,14 @@ import type {
   OpenSandboxVolume,
   OpenWorkProjectStatus,
   RuntimeDescriptor,
+  RuntimeWorkspaceCreateInput,
+  RuntimeWorkspaceDeleteResult,
+  RuntimeWorkspaceEntryMetadata,
   RuntimeWorkspaceManifest,
   RuntimeWorkspaceReadResult,
+  RuntimeWorkspaceRenameResult,
+  RuntimeWorkspaceSearchResult,
+  RuntimeWorkspaceWriteInput,
   RuntimeStatusInput,
   RuntimeTerminalTarget,
 } from './opensandboxRuntime.types';
@@ -19,6 +25,10 @@ import { buildRuntimeMetadata, resolveRuntimeWorkspace } from './runtimeWorkspac
 const WORKSPACE_JSON_PREFIX = 'OPENWORK_WORKSPACE_JSON:';
 const WORKSPACE_MAX_FILES = 2000;
 const WORKSPACE_MAX_READ_BYTES = 1024 * 1024;
+const WORKSPACE_MAX_EDIT_BYTES = 1024 * 1024;
+const WORKSPACE_MAX_WRITE_BYTES = 2 * 1024 * 1024;
+const WORKSPACE_MAX_SEARCH_FILES = 200;
+const WORKSPACE_MAX_SEARCH_MATCHES = 1000;
 const TERMINAL_SHELL = '/bin/bash';
 
 function stripTrailingSlash(value: string) {
@@ -179,23 +189,51 @@ function parseWorkspaceCommandJson<T>(stdout: string): T {
   }
 }
 
-function normalizeWorkspaceRelativePath(pathValue: string, workspaceRoot: string) {
+function normalizeWorkspaceRelativePath(pathValue: string, _workspaceRoot: string) {
   const normalized = String(pathValue || '')
     .trim()
     .replace(/\\/g, '/');
-  const root = stripTrailingSlash(workspaceRoot);
-  const relativePath =
-    normalized === root
-      ? ''
-      : normalized.startsWith(`${root}/`)
-      ? normalized.slice(root.length + 1)
-      : normalized.replace(/^\.?\//, '');
 
-  if (!relativePath || relativePath.startsWith('/') || relativePath.split('/').includes('..')) {
+  if (!normalized || normalized.startsWith('/')) {
     throw new HttpException('文件路径不在工作区内', HttpStatus.BAD_REQUEST);
   }
 
+  const relativePath = normalized.replace(/^\.\//, '').replace(/\/+/g, '/');
+  const segments = relativePath.split('/');
+
+  if (
+    !relativePath ||
+    relativePath === '.' ||
+    relativePath.startsWith('/') ||
+    segments.some(segment => !segment || segment === '.' || segment === '..')
+  ) {
+    throw new HttpException('文件路径不在工作区内', HttpStatus.BAD_REQUEST);
+  }
+
+  if (isHiddenOpenWorkPath(relativePath)) {
+    throw new HttpException('不能访问 OpenWork 运行时内部状态文件', HttpStatus.FORBIDDEN);
+  }
+
   return relativePath;
+}
+
+function isHiddenOpenWorkPath(relativePath: string) {
+  const normalized = String(relativePath || '')
+    .replace(/\\/g, '/')
+    .replace(/^\.\//, '')
+    .toLowerCase();
+  return normalized === '.openwork' || normalized.startsWith('.openwork/');
+}
+
+function ensureTextPayloadLimit(content: string, maxBytes = WORKSPACE_MAX_WRITE_BYTES) {
+  const size = Buffer.byteLength(String(content || ''), 'utf8');
+  if (size > maxBytes) {
+    throw new HttpException('文件内容超过大小限制', HttpStatus.PAYLOAD_TOO_LARGE);
+  }
+  if (String(content || '').includes('\u0000')) {
+    throw new HttpException('不支持写入二进制文件内容', HttpStatus.BAD_REQUEST);
+  }
+  return size;
 }
 
 function normalizeModelApiFormat(apiFormat?: string) {
@@ -272,7 +310,7 @@ const fs = require('fs');
 const path = require('path');
 const root = path.resolve(process.argv[1] || '/workspace');
 const maxFiles = Number(process.argv[2] || ${WORKSPACE_MAX_FILES});
-const ignored = new Set(['.git', 'node_modules', '.pnpm-store', '.cache']);
+const ignored = new Set(['.git', 'node_modules', '.pnpm-store', '.cache', '.openwork']);
 const files = [];
 function detectType(filePath) {
   ${buildWorkspaceTypeDetectorScript()}
@@ -336,6 +374,9 @@ const maxBytes = Number(process.argv[3] || ${WORKSPACE_MAX_READ_BYTES});
 function detectType(filePath) {
   ${buildWorkspaceTypeDetectorScript()}
 }
+if (rel === '.openwork' || rel.startsWith('.openwork/')) {
+  throw new Error('Path is hidden OpenWork runtime state');
+}
 const target = path.resolve(root, rel);
 const rootWithSep = root.endsWith(path.sep) ? root : root + path.sep;
 if (!rel || (target !== root && !target.startsWith(rootWithSep))) {
@@ -365,6 +406,226 @@ console.log('${WORKSPACE_JSON_PREFIX}' + JSON.stringify({
   type,
   updatedAt: stat.mtime.toISOString()
 }));
+`;
+}
+
+function buildWorkspaceMutationHelpersScript() {
+  return `
+function detectType(filePath) {
+  ${buildWorkspaceTypeDetectorScript()}
+}
+function assertVisibleRel(rel) {
+  if (!rel || rel === '.openwork' || rel.startsWith('.openwork/')) {
+    throw new Error('Path is hidden OpenWork runtime state');
+  }
+}
+function assertInsideRoot(realRoot, target) {
+  const realRootWithSep = realRoot.endsWith(path.sep) ? realRoot : realRoot + path.sep;
+  if (target !== realRoot && !target.startsWith(realRootWithSep)) {
+    throw new Error('Path escapes workspace');
+  }
+}
+function assertWritableTargetInsideRoot(realRoot, target) {
+  if (fs.existsSync(target)) {
+    assertInsideRoot(realRoot, fs.realpathSync(target));
+    return;
+  }
+  let parent = path.dirname(target);
+  while (!fs.existsSync(parent)) {
+    const nextParent = path.dirname(parent);
+    if (nextParent === parent) break;
+    parent = nextParent;
+  }
+  assertInsideRoot(realRoot, fs.realpathSync(parent));
+}
+function resolveTarget(root, rel, mustExist) {
+  assertVisibleRel(rel);
+  const target = path.resolve(root, rel);
+  const rootWithSep = root.endsWith(path.sep) ? root : root + path.sep;
+  if (target !== root && !target.startsWith(rootWithSep)) {
+    throw new Error('Path escapes workspace');
+  }
+  const realRoot = fs.realpathSync(root);
+  if (mustExist) {
+    assertInsideRoot(realRoot, fs.realpathSync(target));
+  } else {
+    assertWritableTargetInsideRoot(realRoot, target);
+  }
+  return target;
+}
+function metadata(root, rel) {
+  const target = resolveTarget(root, rel, true);
+  const stat = fs.statSync(target);
+  return {
+    kind: stat.isDirectory() ? 'directory' : 'file',
+    name: path.basename(rel),
+    path: rel.split(path.sep).join('/'),
+    size: stat.size,
+    type: stat.isDirectory() ? 'directory' : detectType(rel),
+    updatedAt: stat.mtime.toISOString(),
+    runId: null,
+    source: 'workspace_root'
+  };
+}
+function writeJson(payload) {
+  console.log('${WORKSPACE_JSON_PREFIX}' + JSON.stringify(payload));
+}
+`;
+}
+
+function buildWriteWorkspaceFileScript() {
+  return `
+const fs = require('fs');
+const path = require('path');
+const root = path.resolve(process.argv[1] || '/workspace');
+const rel = String(process.argv[2] || '').replace(/^\\.\\/+/, '');
+const content = Buffer.from(String(process.argv[3] || ''), 'base64').toString('utf8');
+const maxBytes = Number(process.argv[4] || ${WORKSPACE_MAX_WRITE_BYTES});
+${buildWorkspaceMutationHelpersScript()}
+fs.mkdirSync(root, { recursive: true });
+if (Buffer.byteLength(content, 'utf8') > maxBytes) {
+  throw new Error('Payload too large');
+}
+if (content.includes('\\u0000')) {
+  throw new Error('Binary content is not supported');
+}
+const target = resolveTarget(root, rel, false);
+fs.mkdirSync(path.dirname(target), { recursive: true });
+fs.writeFileSync(target, content, 'utf8');
+writeJson(metadata(root, rel));
+`;
+}
+
+function buildCreateWorkspaceEntryScript() {
+  return `
+const fs = require('fs');
+const path = require('path');
+const root = path.resolve(process.argv[1] || '/workspace');
+const rel = String(process.argv[2] || '').replace(/^\\.\\/+/, '');
+const kind = String(process.argv[3] || 'file') === 'directory' ? 'directory' : 'file';
+const content = Buffer.from(String(process.argv[4] || ''), 'base64').toString('utf8');
+const maxBytes = Number(process.argv[5] || ${WORKSPACE_MAX_WRITE_BYTES});
+${buildWorkspaceMutationHelpersScript()}
+fs.mkdirSync(root, { recursive: true });
+const target = resolveTarget(root, rel, false);
+if (fs.existsSync(target)) {
+  throw new Error('Path already exists');
+}
+if (kind === 'directory') {
+  fs.mkdirSync(target, { recursive: true });
+} else {
+  if (Buffer.byteLength(content, 'utf8') > maxBytes) {
+    throw new Error('Payload too large');
+  }
+  if (content.includes('\\u0000')) {
+    throw new Error('Binary content is not supported');
+  }
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, content, 'utf8');
+}
+writeJson(metadata(root, rel));
+`;
+}
+
+function buildRenameWorkspaceEntryScript() {
+  return `
+const fs = require('fs');
+const path = require('path');
+const root = path.resolve(process.argv[1] || '/workspace');
+const fromRel = String(process.argv[2] || '').replace(/^\\.\\/+/, '');
+const toRel = String(process.argv[3] || '').replace(/^\\.\\/+/, '');
+${buildWorkspaceMutationHelpersScript()}
+fs.mkdirSync(root, { recursive: true });
+const fromTarget = resolveTarget(root, fromRel, true);
+const toTarget = resolveTarget(root, toRel, false);
+if (fs.existsSync(toTarget)) {
+  throw new Error('Destination already exists');
+}
+fs.mkdirSync(path.dirname(toTarget), { recursive: true });
+fs.renameSync(fromTarget, toTarget);
+writeJson({ fromPath: fromRel.split(path.sep).join('/'), toPath: toRel.split(path.sep).join('/'), entry: metadata(root, toRel) });
+`;
+}
+
+function buildDeleteWorkspaceEntryScript() {
+  return `
+const fs = require('fs');
+const path = require('path');
+const root = path.resolve(process.argv[1] || '/workspace');
+const rel = String(process.argv[2] || '').replace(/^\\.\\/+/, '');
+${buildWorkspaceMutationHelpersScript()}
+fs.mkdirSync(root, { recursive: true });
+const target = resolveTarget(root, rel, true);
+const item = metadata(root, rel);
+fs.rmSync(target, { recursive: true, force: false });
+writeJson({ deleted: true, path: item.path, kind: item.kind, type: item.type, size: item.size, updatedAt: item.updatedAt });
+`;
+}
+
+function buildSearchWorkspaceScript() {
+  return `
+const fs = require('fs');
+const path = require('path');
+const root = path.resolve(process.argv[1] || '/workspace');
+const query = String(process.argv[2] || '');
+const maxFiles = Number(process.argv[3] || ${WORKSPACE_MAX_SEARCH_FILES});
+const maxMatches = Number(process.argv[4] || ${WORKSPACE_MAX_SEARCH_MATCHES});
+const ignored = new Set(['.git', 'node_modules', '.pnpm-store', '.cache', '.openwork']);
+const results = [];
+let matchedFiles = 0;
+let truncated = false;
+function isText(buffer) {
+  if (buffer.includes(0)) return false;
+  return true;
+}
+function walk(dir) {
+  if (truncated) return;
+  let entries = [];
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (_error) { return; }
+  entries.sort((left, right) => left.name.localeCompare(right.name));
+  for (const entry of entries) {
+    if (truncated) return;
+    if (ignored.has(entry.name)) continue;
+    const abs = path.join(dir, entry.name);
+    let stat;
+    try { stat = fs.lstatSync(abs); } catch (_error) { continue; }
+    if (stat.isSymbolicLink()) continue;
+    const rel = path.relative(root, abs).split(path.sep).join('/');
+    if (!rel || rel === '.openwork' || rel.startsWith('.openwork/')) continue;
+    if (stat.isDirectory()) {
+      walk(abs);
+      continue;
+    }
+    if (!stat.isFile() || stat.size > ${WORKSPACE_MAX_EDIT_BYTES}) continue;
+    let buffer;
+    try { buffer = fs.readFileSync(abs); } catch (_error) { continue; }
+    if (!isText(buffer)) continue;
+    const text = buffer.toString('utf8');
+    const lines = text.split(/\\r?\\n/g);
+    const fileMatches = [];
+    lines.forEach((line, index) => {
+      if (fileMatches.length + results.reduce((sum, item) => sum + item.matches.length, 0) >= maxMatches) {
+        truncated = true;
+        return;
+      }
+      const column = query ? line.toLowerCase().indexOf(query.toLowerCase()) : -1;
+      if (query && column >= 0) {
+        fileMatches.push({ line: index + 1, column: column + 1, preview: line.slice(0, 500) });
+      }
+    });
+    if (fileMatches.length > 0) {
+      matchedFiles += 1;
+      results.push({ path: rel, matches: fileMatches });
+      if (matchedFiles >= maxFiles) truncated = true;
+    }
+  }
+}
+if (!query.trim()) {
+  throw new Error('Missing search query');
+}
+fs.mkdirSync(root, { recursive: true });
+walk(root);
+console.log('${WORKSPACE_JSON_PREFIX}' + JSON.stringify({ results, truncated }));
 `;
 }
 
@@ -574,6 +835,118 @@ export class OpenSandboxRuntimeService {
       buildReadWorkspaceFileScript(),
       [runtime.descriptor.workspaceRoot, relativePath, String(WORKSPACE_MAX_READ_BYTES)],
       15,
+    );
+  }
+
+  async writeWorkspaceFile(
+    input: RuntimeStatusInput & RuntimeWorkspaceWriteInput,
+  ): Promise<RuntimeWorkspaceEntryMetadata | null> {
+    const runtime = await this.connectExistingRuntime(input);
+    if (!runtime) return null;
+
+    const relativePath = normalizeWorkspaceRelativePath(
+      input.path,
+      runtime.descriptor.workspaceRoot,
+    );
+    ensureTextPayloadLimit(input.content);
+
+    return this.runWorkspaceNodeCommand<RuntimeWorkspaceEntryMetadata>(
+      runtime.sandbox,
+      buildWriteWorkspaceFileScript(),
+      [
+        runtime.descriptor.workspaceRoot,
+        relativePath,
+        Buffer.from(input.content || '', 'utf8').toString('base64'),
+        String(WORKSPACE_MAX_WRITE_BYTES),
+      ],
+      15,
+    );
+  }
+
+  async createWorkspaceEntry(
+    input: RuntimeStatusInput & RuntimeWorkspaceCreateInput,
+  ): Promise<RuntimeWorkspaceEntryMetadata | null> {
+    const runtime = await this.connectExistingRuntime(input);
+    if (!runtime) return null;
+
+    const relativePath = normalizeWorkspaceRelativePath(
+      input.path,
+      runtime.descriptor.workspaceRoot,
+    );
+    const kind = input.kind === 'directory' ? 'directory' : 'file';
+    const content = input.content || '';
+    if (kind === 'file') {
+      ensureTextPayloadLimit(content);
+    }
+
+    return this.runWorkspaceNodeCommand<RuntimeWorkspaceEntryMetadata>(
+      runtime.sandbox,
+      buildCreateWorkspaceEntryScript(),
+      [
+        runtime.descriptor.workspaceRoot,
+        relativePath,
+        kind,
+        Buffer.from(content, 'utf8').toString('base64'),
+        String(WORKSPACE_MAX_WRITE_BYTES),
+      ],
+      15,
+    );
+  }
+
+  async renameWorkspaceEntry(
+    input: RuntimeStatusInput & { fromPath: string; toPath: string },
+  ): Promise<RuntimeWorkspaceRenameResult | null> {
+    const runtime = await this.connectExistingRuntime(input);
+    if (!runtime) return null;
+
+    const fromPath = normalizeWorkspaceRelativePath(input.fromPath, runtime.descriptor.workspaceRoot);
+    const toPath = normalizeWorkspaceRelativePath(input.toPath, runtime.descriptor.workspaceRoot);
+
+    return this.runWorkspaceNodeCommand<RuntimeWorkspaceRenameResult>(
+      runtime.sandbox,
+      buildRenameWorkspaceEntryScript(),
+      [runtime.descriptor.workspaceRoot, fromPath, toPath],
+      15,
+    );
+  }
+
+  async deleteWorkspaceEntry(
+    input: RuntimeStatusInput & { path: string },
+  ): Promise<RuntimeWorkspaceDeleteResult | null> {
+    const runtime = await this.connectExistingRuntime(input);
+    if (!runtime) return null;
+
+    const relativePath = normalizeWorkspaceRelativePath(input.path, runtime.descriptor.workspaceRoot);
+
+    return this.runWorkspaceNodeCommand<RuntimeWorkspaceDeleteResult>(
+      runtime.sandbox,
+      buildDeleteWorkspaceEntryScript(),
+      [runtime.descriptor.workspaceRoot, relativePath],
+      15,
+    );
+  }
+
+  async searchWorkspace(
+    input: RuntimeStatusInput & { query: string },
+  ): Promise<RuntimeWorkspaceSearchResult | null> {
+    const runtime = await this.connectExistingRuntime(input);
+    if (!runtime) return null;
+
+    const query = String(input.query || '').trim();
+    if (!query) {
+      throw new HttpException('缺少搜索关键词', HttpStatus.BAD_REQUEST);
+    }
+
+    return this.runWorkspaceNodeCommand<RuntimeWorkspaceSearchResult>(
+      runtime.sandbox,
+      buildSearchWorkspaceScript(),
+      [
+        runtime.descriptor.workspaceRoot,
+        query,
+        String(WORKSPACE_MAX_SEARCH_FILES),
+        String(WORKSPACE_MAX_SEARCH_MATCHES),
+      ],
+      20,
     );
   }
 
